@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maison — Reconstruction par segmentation</title>
+  <title>Maison — Assets positionnés par template matching</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
     canvas { display: block; }
@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-<div id="info">🖱️ <strong>Orbite</strong> libre | <strong>Molette</strong> zoom</div>
+<div id="info">🖱️ <strong>Orbite</strong> | <strong>Molette</strong> zoom | Assets positionnés par matching</div>
 
 <script type="importmap">
 {
@@ -31,73 +31,77 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ═══════════════════════════════════════════════
-//  CARTE DE PROFONDEUR (extraite de EXT)
-//  Grille 8×12 segments, lus depuis l'analyse pixel
-//  bright > 200 = fenêtre/surface claire
-//  bright 100-200 = mur
-//  bright < 100 = ombre/toit
+//  CONFIG
 // ═══════════════════════════════════════════════
-
-// Segments: [brightness, type]
-// type: 'sky', 'roof', 'wall', 'window', 'garage', 'door'
-const facadeGrid = [
-//  X00     X01     X02     X03     X04     X05     X06     X07
-  [248,200,185,150, 87,100,134,100,129,100, 54,100,193,150], // Y00 — toit/sky
-  [247,200,155,100, 67,100,148,100,155,100,132,100, 83,100,172,150], // Y01
-  [238,200, 97,100,153,100,161,100, 74,100,113,100,114,100,229,200], // Y02
-  [207,200,171,100,141,100,180,100, 95,100,130,100,135,100,230,200], // Y03
-  [162,100,162,100,124,100, 86,100, 90,100,122,100,113,100,229,200], // Y04
-  [106,100, 81,100,101,100,134,100, 79,100, 76,100, 71,100,189,150], // Y05
-  [ 89,100, 92,100,157,120,132,100, 51,100, 54,100, 50,100,112,100], // Y06
-  [ 82,100,136,100,194,150, 98,100, 67,100,102,100, 94,100, 99,100], // Y07
-  [ 66,100,148,100,207,200,107,100, 66,100, 88,100, 91,100, 97,100], // Y08
-  [ 48,100,138,100,208,200,119,100, 92,100, 87,100, 99,100, 82,100], // Y09
-  [ 80,100,163,100,180,100,124,100,155,100, 89,100, 85,100, 62,100], // Y10
-  [120,100,190,150,187,150, 91,100, 77,100,103,100, 84,100, 48,100], // Y11
-];
-
-// Conversion pixel → mètre
-// Building: 441px × 264px dans l'EXT
-// Maison: ~8m de large (d'après plan RDC = 206px pour la maison seule)
-// Maison dans EXT: ~322px (sans garage)
-// Garage dans EXT: ~119px
-
-const EXT_W = 441;  // pixels largeur bâtiment dans EXT
-const EXT_H = 264;  // pixels hauteur bâtiment
-const EXT_START_X = 38;
-const EXT_START_Y = 86;
-
-// Maison seule dans EXT: de X=38 à X=360 environ = 322px → 8m
-const HOUSE_PX = 322;
+const PLAN_W = 206; // px de mur à mur sur le plan
 const HOUSE_M = 8.0;
-const SCALE = HOUSE_M / HOUSE_PX; // m/pixel
+const SCALE = HOUSE_M / PLAN_W;
+const PLAN_H_PX = 272;
+const DEPTH_M = PLAN_H_PX * SCALE;
+const H_ETAGE = 2.7;
+const CX = (22 + 228) / 2; // centre X du plan
+const CZ = (36 + 308) / 2; // centre Z du plan
 
-const GARAGE_PX = EXT_W - HOUSE_PX; // 119px
-const GARAGE_M = GARAGE_PX * SCALE;
+function pxToX(px) { return (px - CX) * SCALE; }
+function pxToZ(py) { return (py - CZ) * SCALE + 0.5; }
 
-const HAUTEUR_M = EXT_H * SCALE; // hauteur totale bâtiment ≈ 6.6m
-const H_ETAGE = HAUTEUR_M / 2;   // ~3.3m par étage
-
-// Grille: 8 colonnes × 12 rangées
-const SEG_COLS = 8;
-const SEG_ROWS = 12;
-const SEG_W = HOUSE_PX / SEG_COLS * SCALE;
-const SEG_H = EXT_H / SEG_ROWS * SCALE;
-
-console.log(`Échelle: ${SCALE.toFixed(4)}m/px`);
-console.log(`Maison: ${HOUSE_M}m × ${(EXT_H*SCALE).toFixed(1)}m`);
-console.log(`Garage: ${GARAGE_M.toFixed(1)}m`);
-console.log(`Segments: ${SEG_W.toFixed(3)}m × ${SEG_H.toFixed(3)}m`);
+// Assets trouvés par template matching
+// Format: [nom, plan_x, plan_y, floor]
+const assets = [
+  // RDC (floor=0)
+  ['baievitredouble', 74, 34, 0],
+  ['baievitretriple', 38, 298, 0],
+  ['baignoir', 162, 68, 0],
+  ['canape3p', 54, 300, 0],
+  ['douche90', 60, 74, 0],
+  ['escalier', 176, 152, 0],
+  ['escalier2', 152, 148, 0],
+  ['evier', 154, 128, 0],
+  ['frigo', 154, 126, 0],
+  ['garage', 20, 120, 0],
+  ['placard2p', 50, 274, 0],
+  ['planTravail', 154, 40, 0],
+  ['plaques', 58, 78, 0],
+  ['porteGarage', 34, 300, 0],
+  ['porteG', 120, 166, 0],
+  ['porteD', 140, 46, 0],
+  ['vasque', 122, 180, 0],
+  ['table2ch', 38, 266, 0],
+  ['terrasse2p', 120, 268, 0],
+  ['toilet', 140, 180, 0],
+  
+  // 1er étage (floor=1)
+  ['baievitredouble', 158, 32, 1],
+  ['baievitretriple', 46, 28, 1],
+  ['baignoir', 104, 148, 1],
+  ['canape3p', 54, 32, 1],
+  ['douche90', 104, 152, 1],
+  ['escalier', 84, 148, 1],
+  ['escalier2', 68, 150, 1],
+  ['evier', 124, 264, 1],
+  ['frigo', 132, 284, 1],
+  ['garage', 40, 8, 1],
+  ['placard2p', 28, 132, 1],
+  ['planTravail', 66, 40, 1],
+  ['plaques', 90, 156, 1],
+  ['porteGarage', 44, 30, 1],
+  ['porteG', 142, 122, 1],
+  ['porteD', 110, 122, 1],
+  ['vasque', 140, 174, 1],
+  ['table2ch', 166, 264, 1],
+  ['terrasse2p', 32, 36, 1],
+  ['toilet', 48, 206, 1],
+];
 
 // ═══════════════════════════════════════════════
 //  SCÈNE
 // ═══════════════════════════════════════════════
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 20, 40);
+scene.fog = new THREE.Fog(0x87ceeb, 15, 30);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 80);
-camera.position.set(10, 5, 14);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 50);
+camera.position.set(6, 5, 10);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -109,11 +113,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(HOUSE_M/2, HAUTEUR_M/2.5, 0);
+controls.target.set(0, H_ETAGE, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
-controls.minDistance = 3;
-controls.maxDistance = 30;
+controls.minDistance = 2;
+controls.maxDistance = 20;
 controls.update();
 
 window.addEventListener('resize', () => {
@@ -125,24 +129,18 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════
 //  MATÉRIAUX
 // ═══════════════════════════════════════════════
-const matMur = new THREE.MeshStandardMaterial({ color: 0xe8ddd0, roughness: 0.7 });
-const matMurOmbre = new THREE.MeshStandardMaterial({ color: 0xc8b8a0, roughness: 0.7 });
-const matToit = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.6 });
-const matFenetre = new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-const matCadre = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
-const matPorte = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.3, metalness: 0.2 });
-const matGarage = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.5 });
-const matGaragePorte = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.4 });
-const matSol = new THREE.MeshStandardMaterial({ color: 0x5a8a4a, roughness: 0.9 });
-const matAllee = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.8 });
-const matPlinthe = new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.5 });
-
-// ═══════════════════════════════════════════════
-//  RECONSTRUCTION PAR SEGMENTS
-//  Chaque segment de la grille devient un volume 3D
-// ═══════════════════════════════════════════════
-
-const PROFONDEUR = 5.0; // profondeur de la maison
+const mur = new THREE.MeshStandardMaterial({ color: 0xd4c9b8, roughness: 0.7 });
+const murInt = new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.8, side: THREE.DoubleSide });
+const solRDC = new THREE.MeshStandardMaterial({ color: 0xc9b8a5, roughness: 0.7 });
+const solEtage = new THREE.MeshStandardMaterial({ color: 0xe0d8c8, roughness: 0.7 });
+const blanc = new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.9 });
+const vitre = new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+const noir = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
+const bois = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.6 });
+const tissu = new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.8 });
+const blancMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.5 });
+const metal = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.3, metalness: 0.7 });
+const rouge = new THREE.MeshStandardMaterial({ color: 0x8a2a1a, roughness: 0.7 });
 
 function box(w, h, d, mat, x, y, z, cs = true, rs = true) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -153,197 +151,139 @@ function box(w, h, d, mat, x, y, z, cs = true, rs = true) {
   return m;
 }
 
-// Position X du bâtiment (centré sur l'origine approximativement)
-const BUILD_X = -1.0;
-const BUILD_Y = 0;
-
-// MUR ARRIÈRE (fond du bâtiment)
-box(HOUSE_M, HAUTEUR_M, 0.12, matMurOmbre, BUILD_X + HOUSE_M/2, BUILD_Y + HAUTEUR_M/2, -PROFONDEUR/2);
-
-// MUR LATÉRAL GAUCHE
-box(0.12, HAUTEUR_M, PROFONDEUR, matMurOmbre, BUILD_X, BUILD_Y + HAUTEUR_M/2, 0);
-
-// PLAFOND
-box(HOUSE_M - 0.1, 0.1, 0, new THREE.MeshStandardMaterial({ color: 0xf2efe8 }), BUILD_X + HOUSE_M/2, BUILD_Y + HAUTEUR_M * 0.98, 0);
-
-// SOL RDC
-box(HOUSE_M - 0.1, 0.1, PROFONDEUR - 0.1, matSol, BUILD_X + HOUSE_M/2, BUILD_Y + 0.05, 0);
-
-// SOL 1er ÉTAGE
-const solEtage = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.8 });
-box(HOUSE_M - 0.1, 0.1, PROFONDEUR - 0.1, solEtage, BUILD_X + HOUSE_M/2, HAUTEUR_M/2 + 0.05, 0);
+// ═══════════════════════════════════════════════
+//  COQUE DU BÂTIMENT
+// ═══════════════════════════════════════════════
+const MUR = 0.12;
+// Sols
+box(HOUSE_M - 0.1, 0.1, DEPTH_M - 0.1, solRDC, 0, 0.05, 0.5);
+box(HOUSE_M - 0.1, 0.1, DEPTH_M - 0.1, solEtage, 0, H_ETAGE + 0.05, 0.5);
+// Murs extérieurs
+box(HOUSE_M, H_ETAGE * 2, MUR, mur, 0, H_ETAGE, DEPTH_M);
+box(HOUSE_M, H_ETAGE * 2, MUR, mur, 0, H_ETAGE, 0);
+box(MUR, H_ETAGE * 2, DEPTH_M, mur, -HOUSE_M/2, H_ETAGE, 0.5);
+box(MUR + 0.5, H_ETAGE * 2 + 0.5, DEPTH_M + 0.5, mur, HOUSE_M/2 + 0.25, H_ETAGE, 0.5);
+// Plafond
+box(HOUSE_M - 0.1, 0.1, DEPTH_M - 0.1, blanc, 0, H_ETAGE * 2, 0.5);
 
 // ═══════════════════════════════════════════════
-//  FAÇADE AVANT — reconstruction segment par segment
-//  Chaque segment de la grille est projeté en 3D
+//  ASSETS 3D
 // ═══════════════════════════════════════════════
-const Z_FACADE = PROFONDEUR/2;
 
-facadeGrid.forEach((row, sy) => {
-  for (let sx = 0; sx < SEG_COLS; sx++) {
-    const bright = row[sx * 2];
-    const type = row[sx * 2 + 1];
-    
-    // Position du segment dans l'espace 3D
-    const segX = BUILD_X + sx * SEG_W + SEG_W/2;
-    const segY = BUILD_Y + sy * SEG_H + SEG_H/2;
-    const segZ = Z_FACADE;
-    
-    // Profondeur basée sur la luminosité
-    // Sombre (<80) = ombre/profondeur → en retrait
-    // Clair (>180) = fenêtre/surface → légèrement en retrait (fenêtre)
-    // Moyen = mur → en surface
-    let recession = 0;
-    let material = matMur;
-    
-    if (bright > 200) {
-      // Très clair = fenêtre ou ciel = recessed
-      recession = -0.15;
-      material = matFenetre;
-      // Cadre de fenêtre
-      box(SEG_W * 0.7, SEG_H * 0.7, 0.02, matFenetre,
-        segX, segY, segZ + 0.02, false, false);
-      // Encadrement foncé
-      const fr = 0.02;
-      box(SEG_W * 0.75, fr, 0.04, matCadre, segX, segY + SEG_H * 0.38, segZ + 0.01, false, false);
-      box(SEG_W * 0.75, fr, 0.04, matCadre, segX, segY - SEG_H * 0.38, segZ + 0.01, false, false);
-      box(fr, SEG_H * 0.76, 0.04, matCadre, segX - SEG_W * 0.37, segY, segZ + 0.01, false, false);
-      box(fr, SEG_H * 0.76, 0.04, matCadre, segX + SEG_W * 0.37, segY, segZ + 0.01, false, false);
-    } else if (bright > 180) {
-      // Claire = mur clair ou zone de transition
-      recession = -0.02;
-      material = matMur;
-    } else if (bright > 120) {
-      // Moyen = mur normal
-      recession = 0;
-      material = matMur;
-    } else if (bright > 70) {
-      // Sombre = mur ombré, garage, toit
-      recession = -0.05;
-      material = matMurOmbre;
-    } else {
-      // Très sombre = toit, ombre profonde
-      recession = -0.1;
-      material = matToit;
-    }
-    
-    // Segment de façade avec épaisseur variable
-    const ep = 0.08 + Math.abs(recession);
-    // Ne pas afficher les segments qui sont purement du ciel
-    if (sy < 2 && sx < 2 && bright > 240) {
-      // ciel - ne pas afficher
-    } else {
-      box(SEG_W + 0.01, SEG_H + 0.01, ep, material, segX, segY, segZ, false, true);
-    }
+function createAsset(type, x, z, floor) {
+  const yBase = floor * H_ETAGE;
+  const S = SCALE * 2; // scale factor for asset size
+  
+  switch(type) {
+    case 'canape3p': // Canapé 3 places
+      box(1.8 * S, 0.5, 0.7 * S, tissu, x, yBase + 0.25, z);
+      box(1.8 * S, 0.3, 0.15 * S, tissu, x, yBase + 0.55, z - 0.3 * S);
+      break;
+    case 'table2ch': // Table + 2 chaises
+      box(0.7 * S, 0.7, 0.5 * S, bois, x, yBase + 0.35, z);
+      box(0.3 * S, 0.4, 0.3 * S, bois, x - 0.5 * S, yBase + 0.2, z);
+      box(0.3 * S, 0.4, 0.3 * S, bois, x + 0.5 * S, yBase + 0.2, z);
+      break;
+    case 'baignoir': // Baignoire
+      box(0.7 * S, 0.4, 1.5 * S, blancMat, x, yBase + 0.2, z);
+      box(0.6 * S, 0.15, 1.4 * S, new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, transparent: true, opacity: 0.5 }), x, yBase + 0.4, z);
+      break;
+    case 'douche90': // Douche 90x90
+      box(0.9 * S, 0.05, 0.9 * S, blancMat, x, yBase + 0.025, z);
+      // Parois
+      box(0.02, 0.8, 0.9 * S, vitre, x - 0.45 * S, yBase + 0.4, z);
+      box(0.9 * S, 0.8, 0.02, vitre, x, yBase + 0.4, z - 0.45 * S);
+      box(0.9 * S, 0.8, 0.02, vitre, x, yBase + 0.4, z + 0.45 * S);
+      break;
+    case 'toilet': // WC
+      box(0.35 * S, 0.4, 0.5 * S, blancMat, x, yBase + 0.2, z);
+      box(0.15 * S, 0.25, 0.15 * S, blancMat, x, yBase + 0.45, z + 0.15 * S);
+      break;
+    case 'vasque': // Lavabo simple
+      box(0.5 * S, 0.75, 0.5 * S, blancMat, x, yBase + 0.375, z);
+      box(0.35 * S, 0.1, 0.35 * S, new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1 }), x, yBase + 0.4, z);
+      break;
+    case 'evier': // Évier cuisine
+      box(0.5 * S, 0.75, 0.4 * S, metal, x, yBase + 0.375, z);
+      box(0.4 * S, 0.1, 0.3 * S, blancMat, x, yBase + 0.4, z);
+      break;
+    case 'frigo': // Frigo américain
+      box(0.5 * S, 1.5, 0.6 * S, metal, x, yBase + 0.75, z);
+      box(0.48 * S, 0.02, 0.58 * S, noir, x, yBase + 0.75, z);
+      break;
+    case 'plaques': // Plaques cuisson
+      box(0.4 * S, 0.05, 0.5 * S, noir, x, yBase + 0.025, z);
+      break;
+    case 'planTravail': // Plan de travail
+      box(2.0 * S, 0.75, 0.6 * S, bois, x, yBase + 0.375, z);
+      box(2.0 * S, 0.05, 0.6 * S, metal, x, yBase + 0.75, z);
+      break;
+    case 'baievitredouble': // Baie vitrée double
+      box(1.2 * S, 1.8, 0.05, vitre, x, yBase + 0.9, z);
+      box(0.04, 1.8, 0.06, noir, x - 0.6 * S, yBase + 0.9, z);
+      box(0.04, 1.8, 0.06, noir, x + 0.6 * S, yBase + 0.9, z);
+      box(1.2 * S, 0.04, 0.06, noir, x, yBase + 1.8, z);
+      break;
+    case 'baievitretriple': // Baie vitrée triple
+      box(1.8 * S, 1.8, 0.05, vitre, x, yBase + 0.9, z);
+      box(0.04, 1.8, 0.06, noir, x - 0.9 * S, yBase + 0.9, z);
+      box(0.04, 1.8, 0.06, noir, x, yBase + 0.9, z);
+      box(0.04, 1.8, 0.06, noir, x + 0.9 * S, yBase + 0.9, z);
+      box(1.8 * S, 0.04, 0.06, noir, x, yBase + 1.8, z);
+      break;
+    case 'porteG': // Porte ouvrante gauche
+      box(0.04, 1.8, 0.6 * S, bois, x, yBase + 0.9, z);
+      break;
+    case 'porteD': // Porte ouvrante droite
+      box(0.04, 1.8, 0.6 * S, bois, x, yBase + 0.9, z);
+      break;
+    case 'escalier': // Escalier
+      for (let i = 0; i < 10; i++) {
+        box(0.3 * S, 0.05 + i * 0.04, 0.8 * S, bois, x + i * 0.1 * S, yBase + 0.025 + i * 0.04, z);
+      }
+      break;
+    case 'escalier2': // Escalier 2
+      for (let i = 0; i < 12; i++) {
+        box(0.8 * S, 0.04 + i * 0.035, 0.3 * S, bois, x, yBase + 0.02 + i * 0.035, z + i * 0.1 * S);
+      }
+      break;
+    case 'placard2p': // Placard 2 portes
+      box(0.8 * S, 2.0, 0.5 * S, bois, x, yBase + 1.0, z);
+      box(0.02, 1.8, 0.48 * S, noir, x - 0.2 * S, yBase + 0.95, z);
+      box(0.02, 1.8, 0.48 * S, noir, x + 0.2 * S, yBase + 0.95, z);
+      break;
+    case 'garage': // Garage classique
+      box(2.0 * S, 2.0, 2.5 * S, new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.5 }), x, yBase + 1.0, z);
+      break;
+    case 'porteGarage': // Porte garage
+      box(2.0 * S, 1.8, 0.04, new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.4 }), x, yBase + 0.9, z);
+      break;
+    case 'terrasse2p': // Terrasse 2 piliers
+      box(2.0 * S, 0.1, 1.5 * S, new THREE.MeshStandardMaterial({ color: 0xb8a890, roughness: 0.6 }), x, yBase + 0.05, z);
+      box(0.15 * S, 2.0, 0.15 * S, mur, x - 0.9 * S, yBase + 1.0, z - 0.6 * S);
+      box(0.15 * S, 2.0, 0.15 * S, mur, x + 0.9 * S, yBase + 1.0, z - 0.6 * S);
+      break;
   }
+}
+
+// Placer tous les assets
+assets.forEach(([type, px, pz, floor]) => {
+  const x3d = pxToX(px);
+  const z3d = pxToZ(pz);
+  createAsset(type, x3d, z3d, floor);
 });
 
 // ═══════════════════════════════════════════════
-//  TOIT (d'après les segments sombres en haut)
+//  TERRAIN + ÉCLAIRAGE
 // ═══════════════════════════════════════════════
-const TOIT_H = 1.8;
-const baseY = BUILD_Y + HAUTEUR_M;
-const peakY = baseY + TOIT_H;
-const peakX = BUILD_X + HOUSE_M * 0.45;
+box(25, 0.02, 20, new THREE.MeshStandardMaterial({ color: 0x5a8a4a, roughness: 0.9 }), 0, -0.01, 0.5, false, true);
 
-// Versant gauche du toit
-const roofGeo1 = new THREE.BufferGeometry();
-const rv1 = new Float32Array([
-  BUILD_X, baseY, -PROFONDEUR/2,
-  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
-  BUILD_X, baseY, PROFONDEUR/2,
-  BUILD_X, baseY, PROFONDEUR/2,
-  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
-  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
-]);
-roofGeo1.setAttribute('position', new THREE.BufferAttribute(rv1, 3));
-roofGeo1.computeVertexNormals();
-
-// Pente gauche (plus pentue)
-const roofL = new THREE.BufferGeometry();
-const rl = new Float32Array([
-  BUILD_X, baseY, -PROFONDEUR/2,
-  peakX, peakY, -PROFONDEUR/2 - 0.5,
-  BUILD_X, baseY, PROFONDEUR/2,
-  BUILD_X, baseY, PROFONDEUR/2,
-  peakX, peakY, -PROFONDEUR/2 - 0.5,
-  peakX, peakY, PROFONDEUR/2 + 0.5,
-]);
-roofL.setAttribute('position', new THREE.BufferAttribute(rl, 3));
-roofL.computeVertexNormals();
-const r1 = new THREE.Mesh(roofL, matToit);
-r1.castShadow = true;
-scene.add(r1);
-
-// Pente droite (moins pentue)
-const roofR = new THREE.BufferGeometry();
-const rr = new Float32Array([
-  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
-  peakX, peakY, -PROFONDEUR/2 - 0.5,
-  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
-  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
-  peakX, peakY, -PROFONDEUR/2 - 0.5,
-  peakX, peakY, PROFONDEUR/2 + 0.5,
-]);
-roofR.setAttribute('position', new THREE.BufferAttribute(rr, 3));
-roofR.computeVertexNormals();
-const r2 = new THREE.Mesh(roofR, matToit);
-r2.castShadow = true;
-scene.add(r2);
-
-// ═══════════════════════════════════════════════
-//  GARAGE (segment X07 = partie droite de l'EXT)
-// ═══════════════════════════════════════════════
-const GARAGE_X = BUILD_X + HOUSE_M;
-const GARAGE_H = HAUTEUR_M * 0.7;
-
-// Volume garage
-box(GARAGE_M, GARAGE_H, PROFONDEUR * 0.7, matGarage,
-  GARAGE_X + GARAGE_M/2, BUILD_Y + GARAGE_H/2, 0);
-
-// Porte de garage (sur la façade avant)
-box(2.0, 1.8, 0.04, matGaragePorte,
-  GARAGE_X + GARAGE_M/2, BUILD_Y + 1.0, Z_FACADE + 0.02, false, false);
-
-// Cadre porte garage
-box(2.08, 0.04, 0.06, matCadre, GARAGE_X + GARAGE_M/2, BUILD_Y + 1.92, Z_FACADE + 0.01, false, false);
-box(0.04, 1.84, 0.06, matCadre, GARAGE_X + GARAGE_M/2 - 1.04, BUILD_Y + 1.0, Z_FACADE + 0.01, false, false);
-box(0.04, 1.84, 0.06, matCadre, GARAGE_X + GARAGE_M/2 + 1.04, BUILD_Y + 1.0, Z_FACADE + 0.01, false, false);
-
-// Toit garage (plat, moderne)
-box(GARAGE_M + 0.2, 0.05, PROFONDEUR * 0.7 + 0.2, matToit,
-  GARAGE_X + GARAGE_M/2, BUILD_Y + GARAGE_H, 0);
-
-// ═══════════════════════════════════════════════
-//  PORTE D'ENTRÉE (moderne, noire)
-//  Positionnée au centre du RDC (segment X03-X04)
-// ═══════════════════════════════════════════════
-const PORTE_X = BUILD_X + HOUSE_M * 0.5;
-const PORTE_L = 0.85;
-const PORTE_H = 2.1;
-
-box(PORTE_L, PORTE_H, 0.04, matPorte, PORTE_X, BUILD_Y + PORTE_H/2, Z_FACADE + 0.02, false, false);
-box(PORTE_L + 0.08, 0.04, 0.06, matCadre, PORTE_X, BUILD_Y + PORTE_H + 0.02, Z_FACADE + 0.01, false, false);
-box(0.04, PORTE_H + 0.04, 0.06, matCadre, PORTE_X - PORTE_L/2 - 0.02, BUILD_Y + PORTE_H/2, Z_FACADE + 0.01, false, false);
-box(0.04, PORTE_H + 0.04, 0.06, matCadre, PORTE_X + PORTE_L/2 + 0.02, BUILD_Y + PORTE_H/2, Z_FACADE + 0.01, false, false);
-
-// ═══════════════════════════════════════════════
-//  SOL / TERRAIN / ALLÉES
-// ═══════════════════════════════════════════════
-box(30, 0.02, 25, matSol, 0, -0.01, 0, false, true);
-box(3.0, 0.04, 5.0, matAllee, GARAGE_X + GARAGE_M/2, 0.01, Z_FACADE + 3, false, true);
-box(1.2, 0.04, 2.5, matAllee, PORTE_X, 0.01, Z_FACADE + 2, false, true);
-box(HOUSE_M * 0.5, 0.06, 1.5, new THREE.MeshStandardMaterial({ color: 0xb8a890, roughness: 0.6 }), BUILD_X + HOUSE_M/2, 0.03, -PROFONDEUR/2 - 1, false, true);
-
-// ═══════════════════════════════════════════════
-//  ÉCLAIRAGE
-// ═══════════════════════════════════════════════
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.4));
 
 const soleil = new THREE.DirectionalLight(0xffeedd, 1.5);
-soleil.position.set(8, 12, 10);
-soleil.target.position.set(HOUSE_M/2, 0, 0);
+soleil.position.set(8, 10, 6);
+soleil.target.position.set(0, 0, 0);
 soleil.castShadow = true;
 soleil.shadow.mapSize.width = 2048;
 soleil.shadow.mapSize.height = 2048;
@@ -357,10 +297,10 @@ scene.add(soleil);
 scene.add(soleil.target);
 
 // Lumières intérieures
-for (let x = 0; x < 3; x++) {
-  for (let y = 0; y < 2; y++) {
-    const l = new THREE.PointLight(0xffeedd, 0.2, 4);
-    l.position.set(BUILD_X + HOUSE_M * (0.2 + x * 0.3), BUILD_Y + HAUTEUR_M * (0.3 + y * 0.5), 0);
+for (let f = 0; f < 2; f++) {
+  for (let i = 0; i < 4; i++) {
+    const l = new THREE.PointLight(0xffeedd, 0.15, 3);
+    l.position.set(-2 + i * 1.3, f * H_ETAGE + 2.5, 2);
     scene.add(l);
   }
 }
@@ -375,12 +315,13 @@ function animate() {
 }
 animate();
 
-console.log(`🏠 Maison reconstruite par segmentation de la façade`);
-console.log(`   ${SEG_COLS}×${SEG_ROWS} segments = ${SEG_COLS*SEG_ROWS} volumes`);
-console.log(`   Projection brillance → profondeur`);
-console.log(`   ${HOUSE_M.toFixed(1)}m × ${PROFONDEUR.toFixed(1)}m, hauteur ${HAUTEUR_M.toFixed(1)}m`);
-console.log(`   Garage: ${GARAGE_M.toFixed(1)}m`);
-console.log(`   Toit pentu asymétrique + porte moderne + garage`);
+console.log(`🏠 ${assets.length} assets positionnés par template matching`);
+console.log(`   RDC: ${assets.filter(a => a[3] === 0).length} éléments`);
+console.log(`   1er: ${assets.filter(a => a[3] === 1).length} éléments`);
+console.log(`   ${20} types d'assets 3D différents`);
+console.log(`   Styles: canapé, table, baignoire, douche, WC, vasque,`);
+console.log(`   évier, frigo, plaques, plan travail, baies vitrées,`);
+console.log(`   portes, escaliers, placard, garage, terrasse`);
 </script>
 </body>
 </html>
