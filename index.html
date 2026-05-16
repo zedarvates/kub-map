@@ -3,20 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maison Moderne — Reconstruction 3D</title>
+  <title>Maison — Reconstruction par segmentation</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
     canvas { display: block; }
     #info {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      color: rgba(255,255,255,0.5); font-size: 14px; background: rgba(0,0,0,0.4);
+      color: rgba(255,255,255,0.5); font-size: 14px; background: rgba(0,0,0,0.5);
       padding: 8px 18px; border-radius: 20px; pointer-events: none; user-select: none;
-      white-space: nowrap;
     }
   </style>
 </head>
 <body>
-<div id="info">🖱️ <strong>Glisser</strong> pour orbiter | <strong>Molette</strong> zoom</div>
+<div id="info">🖱️ <strong>Orbite</strong> libre | <strong>Molette</strong> zoom</div>
 
 <script type="importmap">
 {
@@ -32,38 +31,73 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ═══════════════════════════════════════════════
-//  DIMENSIONS (basées sur analyse EXT + plans)
+//  CARTE DE PROFONDEUR (extraite de EXT)
+//  Grille 8×12 segments, lus depuis l'analyse pixel
+//  bright > 200 = fenêtre/surface claire
+//  bright 100-200 = mur
+//  bright < 100 = ombre/toit
 // ═══════════════════════════════════════════════
-// Plan: 206px = 8m → échelle 1px ≈ 0.039m
-const M = 0.039; // mètres par pixel
 
-// Maison (d'après plan RDC)
-const L = 206 * M;  // 8.0m largeur
-const P = 272 * M;  // 10.6m profondeur
-const H_ETAGE = 2.7;
-const NB_ETAGES = 2;
+// Segments: [brightness, type]
+// type: 'sky', 'roof', 'wall', 'window', 'garage', 'door'
+const facadeGrid = [
+//  X00     X01     X02     X03     X04     X05     X06     X07
+  [248,200,185,150, 87,100,134,100,129,100, 54,100,193,150], // Y00 — toit/sky
+  [247,200,155,100, 67,100,148,100,155,100,132,100, 83,100,172,150], // Y01
+  [238,200, 97,100,153,100,161,100, 74,100,113,100,114,100,229,200], // Y02
+  [207,200,171,100,141,100,180,100, 95,100,130,100,135,100,230,200], // Y03
+  [162,100,162,100,124,100, 86,100, 90,100,122,100,113,100,229,200], // Y04
+  [106,100, 81,100,101,100,134,100, 79,100, 76,100, 71,100,189,150], // Y05
+  [ 89,100, 92,100,157,120,132,100, 51,100, 54,100, 50,100,112,100], // Y06
+  [ 82,100,136,100,194,150, 98,100, 67,100,102,100, 94,100, 99,100], // Y07
+  [ 66,100,148,100,207,200,107,100, 66,100, 88,100, 91,100, 97,100], // Y08
+  [ 48,100,138,100,208,200,119,100, 92,100, 87,100, 99,100, 82,100], // Y09
+  [ 80,100,163,100,180,100,124,100,155,100, 89,100, 85,100, 62,100], // Y10
+  [120,100,190,150,187,150, 91,100, 77,100,103,100, 84,100, 48,100], // Y11
+];
 
-// Garage (d'après EXT: ~119px)
-const G_L = 119 * M;  // ~4.6m
-const G_P = 200 * M;  // ~7.8m
-const G_H = H_ETAGE;
+// Conversion pixel → mètre
+// Building: 441px × 264px dans l'EXT
+// Maison: ~8m de large (d'après plan RDC = 206px pour la maison seule)
+// Maison dans EXT: ~322px (sans garage)
+// Garage dans EXT: ~119px
 
-// Toit pentu (d'après EXT: pente ~71° côté gauche, plus plat côté droit)
-const TOIT_HAUTEUR = 2.0;
+const EXT_W = 441;  // pixels largeur bâtiment dans EXT
+const EXT_H = 264;  // pixels hauteur bâtiment
+const EXT_START_X = 38;
+const EXT_START_Y = 86;
 
-// Décalage pour centrer
-const CX = 0; // centre X
-const CZ = 0; // centre Z
+// Maison seule dans EXT: de X=38 à X=360 environ = 322px → 8m
+const HOUSE_PX = 322;
+const HOUSE_M = 8.0;
+const SCALE = HOUSE_M / HOUSE_PX; // m/pixel
+
+const GARAGE_PX = EXT_W - HOUSE_PX; // 119px
+const GARAGE_M = GARAGE_PX * SCALE;
+
+const HAUTEUR_M = EXT_H * SCALE; // hauteur totale bâtiment ≈ 6.6m
+const H_ETAGE = HAUTEUR_M / 2;   // ~3.3m par étage
+
+// Grille: 8 colonnes × 12 rangées
+const SEG_COLS = 8;
+const SEG_ROWS = 12;
+const SEG_W = HOUSE_PX / SEG_COLS * SCALE;
+const SEG_H = EXT_H / SEG_ROWS * SCALE;
+
+console.log(`Échelle: ${SCALE.toFixed(4)}m/px`);
+console.log(`Maison: ${HOUSE_M}m × ${(EXT_H*SCALE).toFixed(1)}m`);
+console.log(`Garage: ${GARAGE_M.toFixed(1)}m`);
+console.log(`Segments: ${SEG_W.toFixed(3)}m × ${SEG_H.toFixed(3)}m`);
 
 // ═══════════════════════════════════════════════
-//  SCÈNE / RENDU
+//  SCÈNE
 // ═══════════════════════════════════════════════
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 scene.fog = new THREE.Fog(0x87ceeb, 20, 40);
 
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(8, 6, 12);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 80);
+camera.position.set(10, 5, 14);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -75,7 +109,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 2.5, 0);
+controls.target.set(HOUSE_M/2, HAUTEUR_M/2.5, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 controls.minDistance = 3;
@@ -91,271 +125,245 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════
 //  MATÉRIAUX
 // ═══════════════════════════════════════════════
-const facade = new THREE.MeshStandardMaterial({ color: 0xe8ddd0, roughness: 0.7 }); // beige clair moderne
-const facadeSombre = new THREE.MeshStandardMaterial({ color: 0xc8b8a0, roughness: 0.7 });
-const toitMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.6 }); // ardoise foncée
-const solMat = new THREE.MeshStandardMaterial({ color: 0x5a8a4a, roughness: 0.9 });
-const alleeMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.8 });
-const vitre = new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-const cadre = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 }); // cadre fenêtre noir (moderne)
-const porteMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.3 }); // porte moderne noire
-const garageMat = new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.5 });
-const garagePorte = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.4 });
+const matMur = new THREE.MeshStandardMaterial({ color: 0xe8ddd0, roughness: 0.7 });
+const matMurOmbre = new THREE.MeshStandardMaterial({ color: 0xc8b8a0, roughness: 0.7 });
+const matToit = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.6 });
+const matFenetre = new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+const matCadre = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
+const matPorte = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.3, metalness: 0.2 });
+const matGarage = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.5 });
+const matGaragePorte = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.4 });
+const matSol = new THREE.MeshStandardMaterial({ color: 0x5a8a4a, roughness: 0.9 });
+const matAllee = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.8 });
+const matPlinthe = new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.5 });
 
-// Helper: boîte primitive
-function box(w, h, d, mat, x, y, z, castShadow = true, receiveShadow = true) {
+// ═══════════════════════════════════════════════
+//  RECONSTRUCTION PAR SEGMENTS
+//  Chaque segment de la grille devient un volume 3D
+// ═══════════════════════════════════════════════
+
+const PROFONDEUR = 5.0; // profondeur de la maison
+
+function box(w, h, d, mat, x, y, z, cs = true, rs = true) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
-  if (castShadow) m.castShadow = true;
-  if (receiveShadow) m.receiveShadow = true;
+  if (cs) m.castShadow = true;
+  if (rs) m.receiveShadow = true;
   scene.add(m);
   return m;
 }
 
-// ═══════════════════════════════════════════════
-//  MAISON — Volume principal
-// ═══════════════════════════════════════════════
-const SOL = 0;
+// Position X du bâtiment (centré sur l'origine approximativement)
+const BUILD_X = -1.0;
+const BUILD_Y = 0;
 
-// Murs extérieurs (4 faces)
-const MUR_EP = 0.15;
+// MUR ARRIÈRE (fond du bâtiment)
+box(HOUSE_M, HAUTEUR_M, 0.12, matMurOmbre, BUILD_X + HOUSE_M/2, BUILD_Y + HAUTEUR_M/2, -PROFONDEUR/2);
 
-// Mur avant (+Z)
-box(L, H_ETAGE * NB_ETAGES, MUR_EP, facade, 0, H_ETAGE * NB_ETAGES/2, P/2 - MUR_EP/2);
-// Mur arrière (-Z)
-box(L, H_ETAGE * NB_ETAGES, MUR_EP, facade, 0, H_ETAGE * NB_ETAGES/2, -P/2 + MUR_EP/2);
-// Mur gauche (-X)
-box(MUR_EP, H_ETAGE * NB_ETAGES, P, facade, -L/2 + MUR_EP/2, H_ETAGE * NB_ETAGES/2, 0);
-// Mur droit (+X) — partagé avec garage, on le met plus tard
+// MUR LATÉRAL GAUCHE
+box(0.12, HAUTEUR_M, PROFONDEUR, matMurOmbre, BUILD_X, BUILD_Y + HAUTEUR_M/2, 0);
 
-// Plancher RDC
-box(L - 0.1, 0.1, P - 0.1, solMat, 0, 0.05, 0, false, true);
+// PLAFOND
+box(HOUSE_M - 0.1, 0.1, 0, new THREE.MeshStandardMaterial({ color: 0xf2efe8 }), BUILD_X + HOUSE_M/2, BUILD_Y + HAUTEUR_M * 0.98, 0);
 
-// Plancher 1er étage
-box(L - 0.1, 0.1, P - 0.1, new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.9 }), 0, H_ETAGE, 0, false, true);
+// SOL RDC
+box(HOUSE_M - 0.1, 0.1, PROFONDEUR - 0.1, matSol, BUILD_X + HOUSE_M/2, BUILD_Y + 0.05, 0);
+
+// SOL 1er ÉTAGE
+const solEtage = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.8 });
+box(HOUSE_M - 0.1, 0.1, PROFONDEUR - 0.1, solEtage, BUILD_X + HOUSE_M/2, HAUTEUR_M/2 + 0.05, 0);
 
 // ═══════════════════════════════════════════════
-//  FENÊTRES (façade avant, style moderne)
+//  FAÇADE AVANT — reconstruction segment par segment
+//  Chaque segment de la grille est projeté en 3D
 // ═══════════════════════════════════════════════
-const WIN_W = 1.0, WIN_H = 1.3;
-const Z_FEN = P/2 + 0.02;
+const Z_FACADE = PROFONDEUR/2;
 
-function fenetre(x, y, w, h) {
-  // Vitre
-  box(w * 0.85, h * 0.85, 0.02, vitre, x, y, Z_FEN, false, false);
-  // Cadre noir fin
-  box(w + 0.06, 0.03, 0.04, cadre, x, y + h/2, Z_FEN, false, false);
-  box(w + 0.06, 0.03, 0.04, cadre, x, y - h/2, Z_FEN, false, false);
-  box(0.03, h + 0.06, 0.04, cadre, x - w/2, y, Z_FEN, false, false);
-  box(0.03, h + 0.06, 0.04, cadre, x + w/2, y, Z_FEN, false, false);
-  // Croisillons
-  box(0.02, h * 0.7, 0.03, cadre, x, y, Z_FEN, false, false);
-  box(w * 0.7, 0.02, 0.03, cadre, x, y, Z_FEN, false, false);
-}
-
-// RDC — 3 fenêtres
-fenetre(-L/4, 1.5, WIN_W, WIN_H);
-fenetre(L/4, 1.5, WIN_W, WIN_H);
-// Grande fenêtre centrale (baie vitrée)
-fenetre(0, 1.5, 1.8, 1.8);
-
-// 1er étage — 3 fenêtres alignées
-fenetre(-L/4, H_ETAGE + 1.5, WIN_W, WIN_H);
-fenetre(L/4, H_ETAGE + 1.5, WIN_W, WIN_H);
-fenetre(0, H_ETAGE + 1.5, WIN_W * 0.9, WIN_H);
-
-// ═══════════════════════════════════════════════
-//  PORTE D'ENTRÉE (moderne, noire)
-// ═══════════════════════════════════════════════
-const PORTE_L = 0.9, PORTE_H = 2.2;
-const Z_PORTE = P/2 + 0.02;
-
-// Porte
-box(PORTE_L, PORTE_H, 0.05, porteMat, 0, PORTE_H/2, Z_PORTE, false, false);
-// Cadre porte noir
-box(PORTE_L + 0.08, 0.04, 0.06, cadre, 0, PORTE_H + 0.02, Z_PORTE, false, false);
-box(0.04, PORTE_H + 0.04, 0.06, cadre, -PORTE_L/2 - 0.02, PORTE_H/2, Z_PORTE, false, false);
-box(0.04, PORTE_H + 0.04, 0.06, cadre, PORTE_L/2 + 0.02, PORTE_H/2, Z_PORTE, false, false);
-// Poignée
-box(0.02, 0.4, 0.04, new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 }), PORTE_L/2 - 0.08, 1.0, Z_PORTE + 0.03, false, false);
-
-// ═══════════════════════════════════════════════
-//  GARAGE (côté droit)
-// ═══════════════════════════════════════════════
-const GARAGE_X = L/2 + G_L/2 + 0.1;
-
-// Volume garage
-box(G_L, G_H, G_P, facadeSombre, GARAGE_X, G_H/2, 0);
-
-// Mur entre maison et garage (mitoyen)
-box(MUR_EP + 0.05, H_ETAGE * NB_ETAGES + G_H, 0.1, facade, L/2, (H_ETAGE * NB_ETAGES)/2, 0, false, true);
-
-// Porte de garage (sectionnelle, moderne)
-const G_PORTE_L = 2.2, G_PORTE_H = 2.0;
-const Z_GARAGE = G_P/2 + 0.02;
-
-// Fond sombre de la porte
-box(G_PORTE_L, G_PORTE_H, 0.04, garagePorte, GARAGE_X, G_PORTE_H/2, Z_GARAGE, false, false);
-// Panneaux horizontaux (décoration porte sectionnelle)
-for (let i = 0; i < 4; i++) {
-  const yy = 0.3 + i * 0.5;
-  box(G_PORTE_L - 0.2, 0.02, 0.05, new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.3 }), GARAGE_X, yy, Z_GARAGE + 0.02, false, false);
-}
-// Cadre
-box(G_PORTE_L + 0.1, 0.04, 0.06, cadre, GARAGE_X, G_PORTE_H + 0.02, Z_GARAGE, false, false);
-box(0.04, G_PORTE_H + 0.04, 0.06, cadre, GARAGE_X - G_PORTE_L/2 - 0.02, G_PORTE_H/2, Z_GARAGE, false, false);
-box(0.04, G_PORTE_H + 0.04, 0.06, cadre, GARAGE_X + G_PORTE_L/2 + 0.02, G_PORTE_H/2, Z_GARAGE, false, false);
-
-// Fenêtre garage (petite, côté)
-box(0.5, 0.5, 0.02, vitre, GARAGE_X, 1.8, -G_P/2 + 0.05, false, false);
+facadeGrid.forEach((row, sy) => {
+  for (let sx = 0; sx < SEG_COLS; sx++) {
+    const bright = row[sx * 2];
+    const type = row[sx * 2 + 1];
+    
+    // Position du segment dans l'espace 3D
+    const segX = BUILD_X + sx * SEG_W + SEG_W/2;
+    const segY = BUILD_Y + sy * SEG_H + SEG_H/2;
+    const segZ = Z_FACADE;
+    
+    // Profondeur basée sur la luminosité
+    // Sombre (<80) = ombre/profondeur → en retrait
+    // Clair (>180) = fenêtre/surface → légèrement en retrait (fenêtre)
+    // Moyen = mur → en surface
+    let recession = 0;
+    let material = matMur;
+    
+    if (bright > 200) {
+      // Très clair = fenêtre ou ciel = recessed
+      recession = -0.15;
+      material = matFenetre;
+      // Cadre de fenêtre
+      box(SEG_W * 0.7, SEG_H * 0.7, 0.02, matFenetre,
+        segX, segY, segZ + 0.02, false, false);
+      // Encadrement foncé
+      const fr = 0.02;
+      box(SEG_W * 0.75, fr, 0.04, matCadre, segX, segY + SEG_H * 0.38, segZ + 0.01, false, false);
+      box(SEG_W * 0.75, fr, 0.04, matCadre, segX, segY - SEG_H * 0.38, segZ + 0.01, false, false);
+      box(fr, SEG_H * 0.76, 0.04, matCadre, segX - SEG_W * 0.37, segY, segZ + 0.01, false, false);
+      box(fr, SEG_H * 0.76, 0.04, matCadre, segX + SEG_W * 0.37, segY, segZ + 0.01, false, false);
+    } else if (bright > 180) {
+      // Claire = mur clair ou zone de transition
+      recession = -0.02;
+      material = matMur;
+    } else if (bright > 120) {
+      // Moyen = mur normal
+      recession = 0;
+      material = matMur;
+    } else if (bright > 70) {
+      // Sombre = mur ombré, garage, toit
+      recession = -0.05;
+      material = matMurOmbre;
+    } else {
+      // Très sombre = toit, ombre profonde
+      recession = -0.1;
+      material = matToit;
+    }
+    
+    // Segment de façade avec épaisseur variable
+    const ep = 0.08 + Math.abs(recession);
+    // Ne pas afficher les segments qui sont purement du ciel
+    if (sy < 2 && sx < 2 && bright > 240) {
+      // ciel - ne pas afficher
+    } else {
+      box(SEG_W + 0.01, SEG_H + 0.01, ep, material, segX, segY, segZ, false, true);
+    }
+  }
+});
 
 // ═══════════════════════════════════════════════
-//  TOIT (pentu asymétrique, style moderne)
+//  TOIT (d'après les segments sombres en haut)
 // ═══════════════════════════════════════════════
-// Toit à deux pentes : point culminant décalé (asymétrique)
-const TOIT_PIC = H_ETAGE * NB_ETAGES + TOIT_HAUTEUR;
-const TOIT_BASE = H_ETAGE * NB_ETAGES;
-const DECALAGE_PIC = 0.3; // pic légèrement décalé pour asymétrie
+const TOIT_H = 1.8;
+const baseY = BUILD_Y + HAUTEUR_M;
+const peakY = baseY + TOIT_H;
+const peakX = BUILD_X + HOUSE_M * 0.45;
 
-// Face avant du toit (pignon avant)
-const gableShape = new THREE.Shape();
-gableShape.moveTo(-L/2, TOIT_BASE);
-gableShape.lineTo(L/2, TOIT_BASE);
-gableShape.lineTo(L/2 - DECALAGE_PIC, TOIT_PIC);
-gableShape.lineTo(-L/2 - DECALAGE_PIC, TOIT_PIC);
-gableShape.closePath();
-
-const extrudeSettings = { depth: 0.05, bevelEnabled: false };
-const gableGeo = new THREE.ExtrudeGeometry(gableShape, extrudeSettings);
-const gableFront = new THREE.Mesh(gableGeo, toitMat);
-gableFront.position.set(0, 0, P/2 - 0.01);
-gableFront.rotation.y = Math.PI;
-scene.add(gableFront);
-
-const gableBack = gableFront.clone();
-gableBack.position.set(0, 0, -P/2 + 0.01);
-scene.add(gableBack);
-
-// Versants du toit (2 pentes)
-// Pente avant → arrière (charpente)
-function makeRoofSlope(x1, z1, x2, z2, height, flipNormal) {
-  const geo = new THREE.BufferGeometry();
-  const base = TOIT_BASE;
-  const peak = TOIT_PIC;
-  const verts = new Float32Array([
-    x1, base, z1,
-    x2, base, z2,
-    x1, peak, z1 + 1,
-    x2, base, z2,
-    x2, peak, z2 + 1,
-    x1, peak, z1 + 1,
-  ]);
-  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, toitMat);
-  mesh.castShadow = true;
-  mesh.position.y += height;
-  if (flipNormal) mesh.geometry = geo.clone();
-  scene.add(mesh);
-}
-
-// Simplification: toit fait de deux grands triangles extrudés
-// Pente gauche (plus pentue = plus haute)
-const rH = TOIT_HAUTEUR;
-const rPeakX = DECALAGE_PIC;
-
-// Pente avant gauche
+// Versant gauche du toit
 const roofGeo1 = new THREE.BufferGeometry();
 const rv1 = new Float32Array([
-  -L/2, TOIT_BASE, -P/2,
-  rPeakX, TOIT_PIC, -P/2,
-  -L/2, TOIT_BASE, P/2,
-  -L/2, TOIT_BASE, P/2,
-  rPeakX, TOIT_PIC, -P/2,
-  rPeakX, TOIT_PIC, P/2,
+  BUILD_X, baseY, -PROFONDEUR/2,
+  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
+  BUILD_X, baseY, PROFONDEUR/2,
+  BUILD_X, baseY, PROFONDEUR/2,
+  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
+  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
 ]);
 roofGeo1.setAttribute('position', new THREE.BufferAttribute(rv1, 3));
 roofGeo1.computeVertexNormals();
-const r1 = new THREE.Mesh(roofGeo1, toitMat);
+
+// Pente gauche (plus pentue)
+const roofL = new THREE.BufferGeometry();
+const rl = new Float32Array([
+  BUILD_X, baseY, -PROFONDEUR/2,
+  peakX, peakY, -PROFONDEUR/2 - 0.5,
+  BUILD_X, baseY, PROFONDEUR/2,
+  BUILD_X, baseY, PROFONDEUR/2,
+  peakX, peakY, -PROFONDEUR/2 - 0.5,
+  peakX, peakY, PROFONDEUR/2 + 0.5,
+]);
+roofL.setAttribute('position', new THREE.BufferAttribute(rl, 3));
+roofL.computeVertexNormals();
+const r1 = new THREE.Mesh(roofL, matToit);
 r1.castShadow = true;
 scene.add(r1);
 
-// Pente avant droite
-const roofGeo2 = new THREE.BufferGeometry();
-const rv2 = new Float32Array([
-  L/2, TOIT_BASE, -P/2,
-  rPeakX, TOIT_PIC, -P/2,
-  L/2, TOIT_BASE, P/2,
-  L/2, TOIT_BASE, P/2,
-  rPeakX, TOIT_PIC, -P/2,
-  rPeakX, TOIT_PIC, P/2,
+// Pente droite (moins pentue)
+const roofR = new THREE.BufferGeometry();
+const rr = new Float32Array([
+  BUILD_X + HOUSE_M, baseY, -PROFONDEUR/2,
+  peakX, peakY, -PROFONDEUR/2 - 0.5,
+  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
+  BUILD_X + HOUSE_M, baseY, PROFONDEUR/2,
+  peakX, peakY, -PROFONDEUR/2 - 0.5,
+  peakX, peakY, PROFONDEUR/2 + 0.5,
 ]);
-roofGeo2.setAttribute('position', new THREE.BufferAttribute(rv2, 3));
-roofGeo2.computeVertexNormals();
-const r2 = new THREE.Mesh(roofGeo2, toitMat);
+roofR.setAttribute('position', new THREE.BufferAttribute(rr, 3));
+roofR.computeVertexNormals();
+const r2 = new THREE.Mesh(roofR, matToit);
 r2.castShadow = true;
 scene.add(r2);
 
-// Débord de toit (légère avancée)
-box(L + 0.4, 0.03, 0.15, toitMat, 0, TOIT_BASE, P/2 + 0.05, true, false);
-box(L + 0.4, 0.03, 0.15, toitMat, 0, TOIT_BASE, -P/2 - 0.05, true, false);
+// ═══════════════════════════════════════════════
+//  GARAGE (segment X07 = partie droite de l'EXT)
+// ═══════════════════════════════════════════════
+const GARAGE_X = BUILD_X + HOUSE_M;
+const GARAGE_H = HAUTEUR_M * 0.7;
+
+// Volume garage
+box(GARAGE_M, GARAGE_H, PROFONDEUR * 0.7, matGarage,
+  GARAGE_X + GARAGE_M/2, BUILD_Y + GARAGE_H/2, 0);
+
+// Porte de garage (sur la façade avant)
+box(2.0, 1.8, 0.04, matGaragePorte,
+  GARAGE_X + GARAGE_M/2, BUILD_Y + 1.0, Z_FACADE + 0.02, false, false);
+
+// Cadre porte garage
+box(2.08, 0.04, 0.06, matCadre, GARAGE_X + GARAGE_M/2, BUILD_Y + 1.92, Z_FACADE + 0.01, false, false);
+box(0.04, 1.84, 0.06, matCadre, GARAGE_X + GARAGE_M/2 - 1.04, BUILD_Y + 1.0, Z_FACADE + 0.01, false, false);
+box(0.04, 1.84, 0.06, matCadre, GARAGE_X + GARAGE_M/2 + 1.04, BUILD_Y + 1.0, Z_FACADE + 0.01, false, false);
+
+// Toit garage (plat, moderne)
+box(GARAGE_M + 0.2, 0.05, PROFONDEUR * 0.7 + 0.2, matToit,
+  GARAGE_X + GARAGE_M/2, BUILD_Y + GARAGE_H, 0);
 
 // ═══════════════════════════════════════════════
-//  CLÔTURE / TERRASSE / ALLÉE
+//  PORTE D'ENTRÉE (moderne, noire)
+//  Positionnée au centre du RDC (segment X03-X04)
 // ═══════════════════════════════════════════════
-const terrain = new THREE.Mesh(
-  new THREE.PlaneGeometry(30, 25),
-  solMat
-);
-terrain.rotation.x = -Math.PI / 2;
-terrain.position.set(0, -0.02, 0);
-terrain.receiveShadow = true;
-scene.add(terrain);
+const PORTE_X = BUILD_X + HOUSE_M * 0.5;
+const PORTE_L = 0.85;
+const PORTE_H = 2.1;
 
-// Allée voiture (devant garage)
-box(3, 0.05, 6, alleeMat, GARAGE_X, 0.01, 5, false, true);
+box(PORTE_L, PORTE_H, 0.04, matPorte, PORTE_X, BUILD_Y + PORTE_H/2, Z_FACADE + 0.02, false, false);
+box(PORTE_L + 0.08, 0.04, 0.06, matCadre, PORTE_X, BUILD_Y + PORTE_H + 0.02, Z_FACADE + 0.01, false, false);
+box(0.04, PORTE_H + 0.04, 0.06, matCadre, PORTE_X - PORTE_L/2 - 0.02, BUILD_Y + PORTE_H/2, Z_FACADE + 0.01, false, false);
+box(0.04, PORTE_H + 0.04, 0.06, matCadre, PORTE_X + PORTE_L/2 + 0.02, BUILD_Y + PORTE_H/2, Z_FACADE + 0.01, false, false);
 
-// Allée piétonne (porte d'entrée)
-box(1.2, 0.05, 3, alleeMat, 0, 0.01, P/2 + 2, false, true);
-
-// Terrasse (derrière la maison)
-box(L * 0.6, 0.08, 2, new THREE.MeshStandardMaterial({ color: 0xb8a890, roughness: 0.6 }), 0, 0.04, -P/2 - 1, false, true);
+// ═══════════════════════════════════════════════
+//  SOL / TERRAIN / ALLÉES
+// ═══════════════════════════════════════════════
+box(30, 0.02, 25, matSol, 0, -0.01, 0, false, true);
+box(3.0, 0.04, 5.0, matAllee, GARAGE_X + GARAGE_M/2, 0.01, Z_FACADE + 3, false, true);
+box(1.2, 0.04, 2.5, matAllee, PORTE_X, 0.01, Z_FACADE + 2, false, true);
+box(HOUSE_M * 0.5, 0.06, 1.5, new THREE.MeshStandardMaterial({ color: 0xb8a890, roughness: 0.6 }), BUILD_X + HOUSE_M/2, 0.03, -PROFONDEUR/2 - 1, false, true);
 
 // ═══════════════════════════════════════════════
 //  ÉCLAIRAGE
 // ═══════════════════════════════════════════════
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-scene.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.4));
 
-const soleil = new THREE.DirectionalLight(0xffeedd, 1.8);
-soleil.position.set(10, 12, 8);
-soleil.target.position.set(0, 0, 0);
+const soleil = new THREE.DirectionalLight(0xffeedd, 1.5);
+soleil.position.set(8, 12, 10);
+soleil.target.position.set(HOUSE_M/2, 0, 0);
 soleil.castShadow = true;
 soleil.shadow.mapSize.width = 2048;
 soleil.shadow.mapSize.height = 2048;
 soleil.shadow.camera.near = 0.5;
-soleil.shadow.camera.far = 40;
-soleil.shadow.camera.left = -15;
-soleil.shadow.camera.right = 15;
-soleil.shadow.camera.top = 15;
-soleil.shadow.camera.bottom = -15;
+soleil.shadow.camera.far = 30;
+soleil.shadow.camera.left = -12;
+soleil.shadow.camera.right = 12;
+soleil.shadow.camera.top = 10;
+soleil.shadow.camera.bottom = -5;
 scene.add(soleil);
 scene.add(soleil.target);
 
-// Lumières intérieures (visibles la nuit)
-function lampe(x, y, z) {
-  const l = new THREE.PointLight(0xffeedd, 0.3, 5);
-  l.position.set(x, y, z);
-  scene.add(l);
-  // Petit point lumineux décoratif
-  box(0.04, 0.04, 0.04, new THREE.MeshStandardMaterial({ color: 0xffeecc, emissive: 0xffeecc, emissiveIntensity: 0.5 }), x, y, z, false, false);
+// Lumières intérieures
+for (let x = 0; x < 3; x++) {
+  for (let y = 0; y < 2; y++) {
+    const l = new THREE.PointLight(0xffeedd, 0.2, 4);
+    l.position.set(BUILD_X + HOUSE_M * (0.2 + x * 0.3), BUILD_Y + HAUTEUR_M * (0.3 + y * 0.5), 0);
+    scene.add(l);
+  }
 }
-lampe(0, 2.5, 0);
-lampe(-L/4, 2.5, 0);
-lampe(L/4, 2.5, 0);
-lampe(0, H_ETAGE + 2.5, 0);
-lampe(-L/4, H_ETAGE + 2.5, 0);
-lampe(L/4, H_ETAGE + 2.5, 0);
 
 // ═══════════════════════════════════════════════
 //  ANIMATION
@@ -367,12 +375,12 @@ function animate() {
 }
 animate();
 
-console.log(`🏠 Maison Moderne — Reconstruction 3D`);
-console.log(`   Maison: ${L.toFixed(1)}m x ${P.toFixed(1)}m, ${NB_ETAGES} étages`);
-console.log(`   Garage: ${G_L.toFixed(1)}m x ${G_P.toFixed(1)}m`);
-console.log(`   Toit: pentu asymétrique, hauteur ${TOIT_HAUTEUR}m`);
-console.log(`   ${3+3+1} fenêtres + porte moderne + porte garage sectionnelle`);
-console.log(`   Orbite libre — glisser pour tourner autour`);
+console.log(`🏠 Maison reconstruite par segmentation de la façade`);
+console.log(`   ${SEG_COLS}×${SEG_ROWS} segments = ${SEG_COLS*SEG_ROWS} volumes`);
+console.log(`   Projection brillance → profondeur`);
+console.log(`   ${HOUSE_M.toFixed(1)}m × ${PROFONDEUR.toFixed(1)}m, hauteur ${HAUTEUR_M.toFixed(1)}m`);
+console.log(`   Garage: ${GARAGE_M.toFixed(1)}m`);
+console.log(`   Toit pentu asymétrique + porte moderne + garage`);
 </script>
 </body>
 </html>
