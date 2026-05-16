@@ -235,10 +235,8 @@ addCadreBar(DOOR_H, doorZ, DOOR_W + 0.04, 0.04); // linteau
 addCadreBar(0.02, doorZ, DOOR_W + 0.04, 0.02);
 
 // ═══════════════════════════════════════════════
-//  PIÈCE 2 (derrière la porte)
+//  PIÈCE 2 (collée à pièce 1, mur partagé en X)
 // ═══════════════════════════════════════════════
-
-const room2X = W; // centre de la pièce 2 en X
 
 const wallMat2 = (c) => {
   const t = makePlaster(c);
@@ -251,22 +249,20 @@ const wallMat2s = (c) => {
   return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.8 });
 };
 
-// Pour la pièce 2, le mur -X (qui touche la pièce 1) doit aussi être
-// partiellement invisible pour laisser passer la porte.
-// On le rend invisible et on ajoute des murets autour de l'ouverture côté pièce 2.
+// Pièce 2 centrée en X = W (donc son mur -X est à x=W/2 = 1.5, collé au mur +X de pièce 1)
 const room2 = new THREE.Mesh(new THREE.BoxGeometry(W2, H2, D2), [
-  wallMat2s('#7a6a5a'), // +x
-  murInvisible,          // -x (coté pièce 1) — INVISIBLE
+  wallMat2s('#7a6a5a'), // +x (mur extérieur droit)
+  murInvisible,          // -x (mur partagé pièce 1) — INVISIBLE
   new THREE.MeshStandardMaterial({ map: ceilTex, side: THREE.BackSide, roughness: 0.9 }),
   new THREE.MeshStandardMaterial({ map: floorTex2, side: THREE.BackSide, roughness: 0.6 }),
   wallMat2('#8a7a5a'),  // +z
   wallMat2('#7a6a5a'),  // -z
 ]);
-room2.position.set(room2X + W2/2, H2 / 2, 0);
+room2.position.set(W, H2 / 2, 0);
 room2.receiveShadow = true;
 scene.add(room2);
 
-// Murets côté pièce 2 autour de l'ouverture de porte
+// Mur partagé : murets côté pièce 2 autour de l'ouverture de porte
 const murPorteMat2 = new THREE.MeshStandardMaterial({
   map: makePlaster('#7a6a5a'), side: THREE.BackSide, roughness: 0.8
 });
@@ -274,7 +270,7 @@ murPorteMat2.map.repeat.set(H2 / 0.5, D2 / 0.5);
 
 function addMurPorte2(w, h, z, y) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), murPorteMat2);
-  m.position.set(W + 0.01, y, z);
+  m.position.set(W/2 + 0.01, y, z); // mur partagé, côté pièce 2
   scene.add(m);
 }
 addMurPorte2(0.05, H2 - DOOR_H, doorZ - DOOR_W/4, DOOR_H + (H2 - DOOR_H)/2);
@@ -282,12 +278,13 @@ addMurPorte2(0.05, H2 - DOOR_H, doorZ + DOOR_W/4, DOOR_H + (H2 - DOOR_H)/2);
 addMurPorte2(0.05, H2, doorZ - DOOR_W/2 - 0.25, H2/2);
 addMurPorte2(0.05, H2, doorZ + DOOR_W/2 + 0.25, H2/2);
 const hautPorte2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, H2 - DOOR_H, D2), murPorteMat2);
-hautPorte2.position.set(W + 0.01, DOOR_H + (H2 - DOOR_H)/2, 0);
+hautPorte2.position.set(W/2 + 0.01, DOOR_H + (H2 - DOOR_H)/2, 0);
 scene.add(hautPorte2);
 
-// ─── Lumière pièce 2 ───
+// ─── Lumière pièce 2 (centrée dans la pièce) ───
+const p2x = W; // centre X de la pièce 2
 const point2 = new THREE.PointLight(0xeeddcc, 2, 6);
-point2.position.set(room2X + W2/2, H2 - 0.1, 0);
+point2.position.set(p2x, H2 - 0.1, 0);
 point2.castShadow = true;
 scene.add(point2);
 
@@ -296,12 +293,12 @@ const abat2 = new THREE.Mesh(
   new THREE.ConeGeometry(0.15, 0.1, 12),
   new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.6, emissive: 0xeeddcc, emissiveIntensity: 0.08 })
 );
-abat2.position.set(room2X + W2/2, H2 - 0.02, 0);
+abat2.position.set(p2x, H2 - 0.02, 0);
 scene.add(abat2);
 
-// ─── Fenêtre pièce 2 (sur mur +X) ───
+// ─── Fenêtre pièce 2 (sur mur -Z, comme pièce 1) ───
 const FW2 = 1.0, FH2 = 1.2;
-const fX2 = room2X + W2/2, fY2 = 1.3, fZ2 = -D2/2 + 0.01;
+const fX2 = p2x, fY2 = 1.3, fZ2 = -D2/2 + 0.01;
 
 const glass2 = new THREE.Mesh(
   new THREE.PlaneGeometry(FW2 * 0.85, FH2 * 0.85),
@@ -457,35 +454,33 @@ document.addEventListener('keyup', (e) => {
 const clock = new THREE.Clock();
 
 // Zone de collision = pièce 1 + pièce 2, connectées par la porte
+const SHARED_WALL = W / 2; // mur partagé à x=1.5
+const R2_LEFT = SHARED_WALL; // pièce 2 commence ici
+const R2_RIGHT = W + W2 / 2; // pièce 2 finit ici (x=4.5)
+
 function clampPos(pos) {
   const m = 0.15;
-  const doorCenterZ = doorZ;
-  const doorHalfW = DOOR_W / 2;
+  const doorZmin = doorZ - DOOR_W / 2;
+  const doorZmax = doorZ + DOOR_W / 2;
+  const inDoor = pos.z > doorZmin && pos.z < doorZmax && pos.y < DOOR_H;
 
-  // Dans quelle zone est le joueur ?
-  if (pos.x < W/2) {
+  if (pos.x < SHARED_WALL) {
     // Pièce 1
-    // Vérifier si on essaie de passer par la porte vers pièce 2
-    if (pos.z > doorCenterZ + doorHalfW || pos.z < doorCenterZ - doorHalfW || pos.y > DOOR_H) {
-      // Pas dans l'alignement de la porte : mur plein
-      pos.x = Math.min(pos.x, W/2 - m);
+    if (inDoor) {
+      // Dans l'axe de la porte : traversée libre
+      pos.x = Math.max(-W/2 + m, Math.min(R2_RIGHT - m, pos.x));
     } else {
-      // Dans l'alignement de la porte : on peut traverser
-      pos.x = Math.max(-W/2 + m, Math.min(W + W2 + W2/2 - m, pos.x));
+      pos.x = Math.max(-W/2 + m, Math.min(SHARED_WALL - m, pos.x));
     }
     pos.z = Math.max(-D/2 + m, Math.min(D/2 - m, pos.z));
-  } else if (pos.x < W + W2) {
+  } else {
     // Pièce 2
-    if (pos.z > doorCenterZ + doorHalfW || pos.z < doorCenterZ - doorHalfW || pos.y > DOOR_H) {
-      pos.x = Math.max(W + m, Math.min(W + W2 - m, pos.x));
+    if (inDoor) {
+      pos.x = Math.max(-W/2 + m, Math.min(R2_RIGHT - m, pos.x));
     } else {
-      pos.x = Math.max(-W/2 + m, Math.min(W + W2 - m, pos.x));
+      pos.x = Math.max(SHARED_WALL + m, Math.min(R2_RIGHT - m, pos.x));
     }
     pos.z = Math.max(-D2/2 + m, Math.min(D2/2 - m, pos.z));
-  } else {
-    // Devrait pas arriver, on force dans la zone valide
-    pos.x = 0;
-    pos.z = 0;
   }
   return pos;
 }
