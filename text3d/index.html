@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lettres 3D — TextGeometry Three.js</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; background: #111; }
+    canvas { display: block; }
+    #ui {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; z-index: 10;
+    }
+    #ui input {
+      padding: 10px 16px; font-size: 16px; border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 8px; background: rgba(0,0,0,0.6); color: white; outline: none;
+      width: 300px; text-align: center;
+    }
+    #ui input:focus { border-color: #4a9eff; }
+    #ui button {
+      padding: 10px 20px; font-size: 16px; border: none; border-radius: 8px;
+      background: #4a9eff; color: white; cursor: pointer; font-weight: 600;
+      transition: background 0.2s;
+    }
+    #ui button:hover { background: #6ab4ff; }
+    #info {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      color: rgba(255,255,255,0.4); font-size: 13px;
+      background: rgba(0,0,0,0.5); padding: 6px 16px; border-radius: 12px;
+      pointer-events: none; white-space: nowrap;
+    }
+    .controls-hint {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      color: rgba(255,255,255,0.25); font-size: 12px; text-align: center;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="info">🔤 <strong>Texte 3D</strong> — TextGeometry + animations</div>
+<div class="controls-hint">Glisser pour orbiter · Molette zoom · Entrée pour valider</div>
+<div id="ui">
+  <input id="textInput" type="text" value="Hnoss Engine" maxlength="30" />
+  <button id="updateBtn">🔄 Mettre à jour</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+
+// ─── Scène ───
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(4, 2, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 2;
+controls.maxDistance = 20;
+controls.update();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── Lumières ───
+const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+scene.add(ambient);
+
+const hemi = new THREE.HemisphereLight(0x4a9eff, 0xaa44ff, 0.5);
+scene.add(hemi);
+
+const keyLight = new THREE.DirectionalLight(0xffeedd, 2);
+keyLight.position.set(5, 8, 5);
+keyLight.castShadow = true;
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x4488ff, 0.6);
+fillLight.position.set(-3, 2, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xaa66ff, 0.4);
+rimLight.position.set(-2, 1, 6);
+scene.add(rimLight);
+
+// ─── Sol réflectif ───
+const floorGeo = new THREE.PlaneGeometry(12, 12);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x111118,
+  roughness: 0.2,
+  metalness: 0.8,
+  transparent: true,
+  opacity: 0.6,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.3;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grille subtile
+const gridHelper = new THREE.GridHelper(8, 20, 0x4444aa, 0x222244);
+gridHelper.position.y = -0.28;
+gridHelper.material.transparent = true;
+gridHelper.material.opacity = 0.3;
+scene.add(gridHelper);
+
+// ─── Particules d'arrière-plan ───
+const particleCount = 800;
+const particles = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount * 3; i++) {
+  positions[i] = (Math.random() - 0.5) * 30;
+}
+particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+const particleMat = new THREE.PointsMaterial({
+  color: 0x4488ff,
+  size: 0.02,
+  transparent: true,
+  opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+});
+const particleSystem = new THREE.Points(particles, particleMat);
+particleSystem.position.y = 2;
+scene.add(particleSystem);
+
+// ─── Texte 3D ───
+let textMesh = null;
+let textGroup = new THREE.Group();
+scene.add(textGroup);
+
+const fontUrl = 'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json';
+
+function createText(text, callback) {
+  const loader = new FontLoader();
+  loader.load(fontUrl, (font) => {
+    // Remove old mesh
+    while (textGroup.children.length > 0) {
+      const child = textGroup.children[0];
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+      textGroup.remove(child);
+    }
+
+    const textGeo = new TextGeometry(text, {
+      font: font,
+      size: 0.6,
+      height: 0.2,
+      curveSegments: 6,
+      bevelEnabled: true,
+      bevelThickness: 0.03,
+      bevelSize: 0.02,
+      bevelSegments: 3,
+    });
+
+    textGeo.computeBoundingBox();
+    const centerX = (textGeo.boundingBox.max.x + textGeo.boundingBox.min.x) / 2;
+    const centerY = (textGeo.boundingBox.max.y + textGeo.boundingBox.min.y) / 2;
+
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: 0x4a9eff,
+      metalness: 0.3,
+      roughness: 0.2,
+      envMapIntensity: 1.0,
+      clearcoat: 0.3,
+      clearcoatRoughness: 0.2,
+      emissive: 0x1122aa,
+      emissiveIntensity: 0.05,
+    });
+
+    const mesh = new THREE.Mesh(textGeo, mat);
+    mesh.position.set(-centerX, -centerY, 0);
+    mesh.castShadow = true;
+    textGroup.add(mesh);
+    textMesh = mesh;
+
+    // Contour lumineux (edge glow)
+    const edgeMat = new THREE.MeshPhysicalMaterial({
+      color: 0x88ccff,
+      emissive: 0x4488ff,
+      emissiveIntensity: 0.15,
+      transparent: true,
+      opacity: 0.3,
+      wireframe: false,
+      side: THREE.BackSide,
+    });
+    const edgeMesh = new THREE.Mesh(textGeo.clone(), edgeMat);
+    edgeMesh.position.copy(mesh.position);
+    edgeMesh.scale.set(1.05, 1.05, 1.05);
+    textGroup.add(edgeMesh);
+
+    if (callback) callback();
+  });
+}
+
+// Create initial text
+createText('Hnoss Engine');
+
+// ─── UI ───
+const input = document.getElementById('textInput');
+const btn = document.getElementById('updateBtn');
+
+function updateText() {
+  const val = input.value.trim() || 'Hello';
+  createText(val);
+}
+
+btn.addEventListener('click', updateText);
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') updateText();
+});
+
+// ─── Animation ───
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const t = clock.getElapsedTime();
+
+  // Floating animation
+  textGroup.position.y = 0.5 + Math.sin(t * 0.8) * 0.15;
+  textGroup.rotation.x = Math.sin(t * 0.3) * 0.03;
+  textGroup.rotation.z = Math.cos(t * 0.4) * 0.02;
+
+  // Particle rotation
+  particleSystem.rotation.y = t * 0.01;
+
+  // Pulse emissive
+  if (textMesh && textMesh.material) {
+    const pulse = 0.03 + Math.sin(t * 1.5) * 0.03;
+    textMesh.material.emissiveIntensity = pulse;
+  }
+
+  // Grid pulse
+  gridHelper.material.opacity = 0.2 + Math.sin(t * 0.5) * 0.1;
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+animate();
+
+console.log('🔤 Texte 3D chargé — modifie le texte dans le champ');
+console.log('   Font: Helvetiker Bold, TextGeometry + Bevel');
+console.log('   Animations: floating, rotation, pulse lumineux');
+</script>
+</body>
+</html>
