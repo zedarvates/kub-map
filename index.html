@@ -3,327 +3,287 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maison Moderne — Reconstruction complète</title>
+  <title>Maison Moderne — Bardage bois (vision)</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
     canvas { display: block; }
     #info {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       color: rgba(255,255,255,0.6); font-size: 13px;
-      background: rgba(0,0,0,0.5); padding: 6px 16px;
-      border-radius: 16px; pointer-events: none; white-space: nowrap;
+      background: rgba(0,0,0,0.5); padding: 6px 16px; border-radius: 16px;
+      pointer-events: none; white-space: nowrap;
     }
-    #legend {
-      position: fixed; top: 12px; left: 12px;
-      color: rgba(255,255,255,0.7); font-size: 11px;
-      background: rgba(0,0,0,0.5); padding: 8px 12px;
-      border-radius: 8px; pointer-events: none;
-      line-height: 1.6;
-    }
-    #legend span { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; }
   </style>
 </head>
 <body>
-
-<div id="legend">
-  <div><span style="background:#d4c9b8"></span> Mur extérieur</div>
-  <div><span style="background:#f0e8d8"></span> Cloison</div>
-  <div><span style="background:#87ceeb"></span> Fenêtre / Baie</div>
-  <div><span style="background:#8a7a5a"></span> Mobilier</div>
-  <div><span style="background:#e8e0d0"></span> Salle d'eau</div>
-</div>
-
-<div id="info">🖱️ <strong>Orbite</strong> | <strong>Molette</strong> zoom | Maison moderne 2 étages + garage</div>
-
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
-
+<div id="info">🖱️ <strong>Orbite</strong> | Molette zoom | Moderne — Bardage bois (vision AI)</div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ═══════════════════════════════════════════════
-//  CONFIG
+//  CONFIG (dimensions plans + style vision)
 // ═══════════════════════════════════════════════
-const S = 8 / 206; // m/pixel (206px = 8m)
-const H = 2.7;     // hauteur étage
-const PX = { f1: [22,52,117,165,228], f1z: [36,146,176,207,265,308],
-             f2: [24,81,114,137,224], f2z: [35,79,146,164,190,209,240,255,307] };
+const S = 8/206, H_ET = 2.7, H_TOT = H_ET*2;
+// Murs RDC
+const MX_RDC = [22,52,117,165,228], MZ_RDC = [36,146,176,207,265,308];
+const L = (228-22)*S, D = (308-36)*S;
+const CX = (22+228)/2, CZ = (36+308)/2;
+const pX = p => (p-CX)*S, pZ = p => (p-CZ)*S;
 
-function pxX(p) { return (p - (22+228)/2) * S; }
-function pxZ(p) { return (p - (36+308)/2) * S + 0.5; }
+// ═══════════════════════════════════════════════
+//  SCÈNE
+// ═══════════════════════════════════════════════
+const sc = new THREE.Scene();
+sc.background = new THREE.Color(0x87ceeb);
+sc.fog = new THREE.Fog(0x87ceeb, 20, 40);
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 18, 35);
+const ca = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 60);
+ca.position.set(9, 5, 13);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 50);
-camera.position.set(7, 5, 11);
+const re = new THREE.WebGLRenderer({antialias:true});
+re.setSize(innerWidth, innerHeight);
+re.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+re.toneMapping = THREE.ACESFilmicToneMapping;
+re.toneMappingExposure = 1.0;
+re.shadowMap.enabled = true;
+re.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(re.domElement);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
-
-const ctrl = new OrbitControls(camera, renderer.domElement);
-ctrl.target.set(0, H, 0);
-ctrl.enableDamping = true; ctrl.dampingFactor = 0.1;
-ctrl.minDistance = 2; ctrl.maxDistance = 25;
-ctrl.update();
+const co = new OrbitControls(ca, re.domElement);
+co.target.set(0, H_ET, 0);
+co.enableDamping = true;
+co.dampingFactor = 0.1;
+co.minDistance = 3;
+co.maxDistance = 30;
+co.update();
 
 addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  ca.aspect = innerWidth / innerHeight;
+  ca.updateProjectionMatrix();
+  re.setSize(innerWidth, innerHeight);
 });
 
-// ─── Matériaux ───
-const M = (c, r=0.7, m=0, e=0, ei=0) =>
-  new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m, emissive: e, emissiveIntensity: ei });
-const murExt = M(0xd4c9b8);
-const murInt = M(0xf0e8d8, 0.85); murInt.side = THREE.DoubleSide;
-const blanc = M(0xf2efe8, 0.9);
-const solRdc = M(0xc9b8a5, 0.7);
-const solEta = M(0xe0d8c8, 0.7);
-const vitre = M(0x87ceeb, 0.05); vitre.transparent = true; vitre.opacity = 0.35; vitre.side = THREE.DoubleSide;
-const noir = M(0x1a1a1a, 0.5);
-const bois = M(0x8a7a5a, 0.6);
-const tissu = M(0x6a5a4a, 0.8);
-const blcM = M(0xe8e0d0, 0.5);
-const metal = M(0x888888, 0.3, 0.7);
-const carrelage = M(0x8a9a7a, 0.5); // carrelage salle d'eau
-const gres = M(0xb8a890, 0.6);
-const herbe = M(0x5a8a4a, 0.9);
+// ═══════════════════════════════════════════════
+//  MATÉRIAUX (style moderne — vision AI)
+// ═══════════════════════════════════════════════
+// Vision: "dark color walls with wooden siding, white frames, dark shingles"
 
-function B(w, h, d, m, x, y, z, cs = true, rs = true) {
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  b.position.set(x, y, z);
-  if (cs) b.castShadow = true;
-  if (rs) b.receiveShadow = true;
-  scene.add(b); return b;
+// Bardage bois (texture procédurale)
+function makeBardage(base, clair, fonce) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  // Fond
+  ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
+  // Lames verticales
+  for (let x = 0; x < 256; x += 12) {
+    ctx.fillStyle = Math.random() > 0.5 ? clair : fonce;
+    ctx.fillRect(x, 0, 10, 256);
+  }
+  // Joints
+  for (let x = 0; x < 256; x += 12) {
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x+10, 0, 2, 256);
+  }
+  // Nœuds du bois
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${0.1+Math.random()*0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(Math.random()*256, Math.random()*256, 3+Math.random()*5, 2+Math.random()*3, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1, 2);
+  tex.anisotropy = 8;
+  return tex;
 }
 
-// ─── Sols ───
-const LW = (228-22)*S, LD = (308-36)*S;
-B(LW, 0.1, LD, solRdc, 0, 0.05, 0.5);
-B(LW, 0.1, LD, solEta, 0, H+0.05, 0.5);
+const bardageFonce = new THREE.MeshStandardMaterial({
+  map: makeBardage('#3a3a3a', '#4a4a4a', '#2a2a2a'),
+  roughness: 0.7,
+});
+const bardageClair = new THREE.MeshStandardMaterial({
+  map: makeBardage('#8a7a5a', '#9a8a6a', '#7a6a4a'),
+  roughness: 0.6,
+});
+const toitMat = new THREE.MeshStandardMaterial({
+  color: 0x2a2a2a, roughness: 0.6, metalness: 0.1,
+});
+const solRDC = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.6 });
+const solETG = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.6 });
+const vitre = new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+const cadre = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.5 }); // blanc
+const porteMat = new THREE.MeshStandardMaterial({ color: 0xe0d8c8, roughness: 0.4 });
+const garagePorte = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.4 });
+const herbe = new THREE.MeshStandardMaterial({ color: 0x5a8a4a, roughness: 0.9 });
+const allee = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.8 });
+const bois = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.6 });
+const tissu = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.8 });
+
+function B(w,h,d,m,x,y,z,cs=true,rs=true) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+  b.position.set(x,y,z); if(cs)b.castShadow=true; if(rs)b.receiveShadow=true;
+  sc.add(b); return b;
+}
+
+// ═══════════════════════════════════════════════
+//  STRUCTURE
+// ═══════════════════════════════════════════════
+// Sols
+B(L, 0.1, D, solRDC, 0, 0.05, 0.5);
+B(L, 0.1, D, solETG, 0, H_ET+0.05, 0.5);
 B(30, 0.02, 25, herbe, 0, -0.01, 0.5, false, true);
 
-// ─── Murs extérieurs ───
+// Murs extérieurs bardage bois foncé
 const EP = 0.12;
-// Avant (+Z)
-B(LW, H*2, EP, murExt, 0, H, pxZ(308));
-// Arrière (-Z)
-B(LW, H*2, EP, murExt, 0, H, pxZ(36));
-// Gauche (-X)
-B(EP, H*2, LD, murExt, pxX(22), H, 0.5);
-// Droit (+X) — avec garage
-B(EP, H*2, LD, murExt, pxX(228), H, 0.5);
-// Plafond
-B(LW, 0.1, LD, blanc, 0, H*2, 0.5);
+B(L, H_TOT, EP, bardageFonce, 0, H_ET, pZ(308));      // avant
+B(L, H_TOT, EP, bardageFonce, 0, H_ET, pZ(36));       // arrière
+B(EP, H_TOT, D, bardageFonce, pX(22), H_ET, 0.5);     // gauche
+B(EP, H_TOT, D, bardageFonce, pX(228), H_ET, 0.5);    // droite
+B(L, 0.1, D, new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:0.9}), 0, H_TOT, 0.5); // plafond
 
-// ─── Murs intérieurs ───
-// RDC: murs verticaux (X)
-[52, 117, 165].forEach(x => {
-  B(EP/2, H*0.8, LD*0.8, murInt, pxX(x), H*0.4, 0.5);
-});
-// RDC: murs horizontaux (Z)
-[146, 176, 207, 265].forEach(z => {
-  B(LW*0.7, H*0.8, EP/2, murInt, 0, H*0.4, pxZ(z));
-});
-// 1er étage: murs verticaux
-[81, 114, 137].forEach(x => {
-  const z1 = (PX.f2z[0]+PX.f2z[PX.f2z.length-1])/2;
-  B(EP/2, H*0.8, (PX.f2z[PX.f2z.length-1]-PX.f2z[0])*S*0.7, murInt, pxX(x), H+H*0.4, 0.5);
-});
-// 1er étage: murs horizontaux
-[79, 146, 164, 190, 209, 240, 255].forEach(z => {
-  B((PX.f2[PX.f2.length-1]-PX.f2[0])*S*0.6, H*0.8, EP/2, murInt, 0, H+H*0.4, pxZ(z));
-});
+// Murs intérieurs (cloisons blanches)
+const murI = new THREE.MeshStandardMaterial({color:0xf0e8d8,roughness:0.85}); murI.side=THREE.DoubleSide;
+MX_RDC.slice(1,-1).forEach(x => B(EP/2, H_ET*0.8, D*0.7, murI, pX(x), H_ET*0.4, 0.5));
+MZ_RDC.slice(1,-1).forEach(z => B(L*0.7, H_ET*0.8, EP/2, murI, 0, H_ET*0.4, pZ(z)));
 
-// ─── Garage ───
-const GX = pxX(228) + 2.5;
-B(4.6, 2.5, 7, M(0xc8b8a0, 0.7), GX+2.3, 1.25, 0.5);
-B(4.4, 2, 0.04, M(0x6a5a4a, 0.4), GX+2.3, 1, pxZ(308)+0.02, false, false);
-B(4.5, 0.04, 0.06, noir, GX+2.3, 2.02, pxZ(308)+0.01, false, false);
-B(0.04, 2.04, 0.06, noir, GX+0.1, 1, pxZ(308)+0.01, false, false);
-B(0.04, 2.04, 0.06, noir, GX+4.5, 1, pxZ(308)+0.01, false, false);
+// ═══════════════════════════════════════════════
+//  TOIT PLAT (moderne)
+// ═══════════════════════════════════════════════
+// Légère pente pour évacuation eau
+const shape = new THREE.Shape();
+shape.moveTo(-L/2-0.3, 0);
+shape.lineTo(L/2+0.3, 0);
+shape.lineTo(L/2+0.3, 0.15); // pente
+shape.lineTo(-L/2-0.3, 0);
+shape.closePath();
+const extrude = {depth: D+0.6, bevelEnabled: false};
+const toitGeo = new THREE.ExtrudeGeometry(shape, extrude);
+const toit = new THREE.Mesh(toitGeo, toitMat);
+toit.position.set(0, H_TOT, -D/2-0.3);
+toit.castShadow = true; toit.receiveShadow = true;
+sc.add(toit);
 
-// ─── Porte d'entrée ───
-const PXdoor = 0, PZdoor = pxZ(308);
-B(0.85, 2.1, 0.04, M(0x3a3a3a, 0.3, 0.2), PXdoor, 1.05, PZdoor+0.02, false, false);
-B(0.9, 0.04, 0.06, noir, PXdoor, 2.12, PZdoor+0.01, false, false);
-B(0.04, 2.14, 0.06, noir, PXdoor-0.44, 1.05, PZdoor+0.01, false, false);
-B(0.04, 2.14, 0.06, noir, PXdoor+0.44, 1.05, PZdoor+0.01, false, false);
-B(0.02, 0.4, 0.04, M(0xcccccc, 0.3, 0.8), 0.35, 1.0, PZdoor+0.05, false, false);
+// Acrotère (bordure toit)
+const acro = new THREE.MeshStandardMaterial({color:0x3a3a3a,roughness:0.7});
+B(L+0.6, 0.3, 0.15, acro, 0, H_TOT+0.15, D/2+0.35);
+B(L+0.6, 0.3, 0.15, acro, 0, H_TOT+0.15, -D/2-0.35);
+B(0.15, 0.3, D+0.6, acro, -L/2-0.37, H_TOT+0.15, 0.5);
+B(0.15, 0.3, D+0.6, acro, L/2+0.37, H_TOT+0.15, 0.5);
 
-// ─── Fenêtres ───
+// ═══════════════════════════════════════════════
+//  FENÊTRES (grandes, cadres blancs)
+// ═══════════════════════════════════════════════
 function fen(x, y, z, w, h) {
   B(w*0.85, h*0.85, 0.02, vitre, x, y, z, false, false);
-  B(w+0.06, 0.03, 0.04, noir, x, y+h/2, z, false, false);
-  B(w+0.06, 0.03, 0.04, noir, x, y-h/2, z, false, false);
-  B(0.03, h+0.06, 0.04, noir, x-w/2, y, z, false, false);
-  B(0.03, h+0.06, 0.04, noir, x+w/2, y, z, false, false);
+  B(w+0.08, 0.04, 0.05, cadre, x, y+h/2, z, false, false);
+  B(w+0.08, 0.04, 0.05, cadre, x, y-h/2, z, false, false);
+  B(0.04, h+0.08, 0.05, cadre, x-w/2, y, z, false, false);
+  B(0.04, h+0.08, 0.05, cadre, x+w/2, y, z, false, false);
+  // Croisillons (grille style moderne)
+  B(0.02, h*0.7, 0.03, cadre, x, y, z, false, false);
+  B(w*0.7, 0.02, 0.03, cadre, x, y, z, false, false);
 }
-fen(pxX(60), 1.3, pxZ(308), 0.8, 1.2);
-fen(pxX(140), 1.3, pxZ(308), 0.8, 1.2);
-fen(0, 1.3, pxZ(308), 1.6, 1.6);
-fen(pxX(60), H+1.3, pxZ(308), 0.8, 1.2);
-fen(pxX(140), H+1.3, pxZ(308), 0.8, 1.2);
-fen(0, H+1.3, pxZ(308), 1.2, 1.4);
 
-// ─── Assets 3D par catégorie ───
-// [type, planX, planZ, floor] (trouvés par template matching)
+// RDC — 3 fenêtres
+fen(pX(60), 1.5, pZ(308), 1.0, 1.4);
+fen(pX(140), 1.5, pZ(308), 1.0, 1.4);
+fen(0, 1.5, pZ(308), 1.8, 1.8); // baie vitrée
+
+// 1er étage — 3 fenêtres alignées
+fen(pX(60), H_ET+1.5, pZ(308), 1.0, 1.4);
+fen(pX(140), H_ET+1.5, pZ(308), 1.0, 1.4);
+fen(0, H_ET+1.5, pZ(308), 1.4, 1.6);
+
+// Fenêtre côté garage
+fen(pX(170), 1.5, pZ(308), 0.6, 0.6);
+
+// ═══════════════════════════════════════════════
+//  PORTE D'ENTRÉE (blanche, moderne)
+// ═══════════════════════════════════════════════
+B(0.9, 2.1, 0.04, porteMat, 0, 1.05, pZ(308)+0.02, false, false);
+B(0.95, 0.04, 0.06, cadre, 0, 2.12, pZ(308)+0.01, false, false);
+B(0.04, 2.14, 0.06, cadre, -0.46, 1.05, pZ(308)+0.01, false, false);
+B(0.04, 2.14, 0.06, cadre, 0.46, 1.05, pZ(308)+0.01, false, false);
+// Poignée design
+B(0.02, 0.5, 0.04, new THREE.MeshStandardMaterial({color:0xcccccc,roughness:0.2,metalness:0.9}), 0.36, 1.0, pZ(308)+0.05, false, false);
+
+// ═══════════════════════════════════════════════
+//  GARAGE (porte blanche sectionnelle)
+// ═══════════════════════════════════════════════
+const GX = pX(228) + 2.3;
+B(4.6, 2.5, 7, bardageClair, GX+2.3, 1.25, 0.5);
+// Porte garage blanche
+B(2.2, 2.0, 0.04, garagePorte, GX+2.3, 1.0, pZ(308)+0.02, false, false);
+// Cadre blanc
+B(2.28, 0.04, 0.06, cadre, GX+2.3, 2.02, pZ(308)+0.01, false, false);
+B(0.04, 2.04, 0.06, cadre, GX+1.18, 1.0, pZ(308)+0.01, false, false);
+B(0.04, 2.04, 0.06, cadre, GX+3.42, 1.0, pZ(308)+0.01, false, false);
+// Panneaux décoratifs porte garage
+for (let i = 0; i < 3; i++) {
+  B(1.8, 0.02, 0.05, new THREE.MeshStandardMaterial({color:0x3a3a3a,roughness:0.4}), GX+2.3, 0.35+i*0.6, pZ(308)+0.04, false, false);
+}
+
+// ═══════════════════════════════════════════════
+//  ASSETS (template matching)
+// ═══════════════════════════════════════════════
 const A = [
-  ['canape', 54, 300, 0],
-  ['table', 38, 266, 0],
-  ['baignoir', 162, 68, 0],
-  ['douche', 60, 74, 0],
-  ['wc', 140, 180, 0],
-  ['vasque', 122, 180, 0],
-  ['evier', 154, 128, 0],
-  ['frigo', 154, 126, 0],
-  ['cuisson', 58, 78, 0],
-  ['planTravail', 154, 40, 0],
-  ['placard', 50, 274, 0],
-  ['baie2', 74, 34, 0],
-  ['baie3', 38, 298, 0],
-  ['porteG', 120, 166, 0],
-  ['porteD', 140, 46, 0],
-  ['terrasse', 120, 268, 0],
-  // 1er étage
-  ['canape', 54, 32, 1],
-  ['table', 166, 264, 1],
-  ['baignoir', 104, 148, 1],
-  ['douche', 104, 152, 1],
-  ['wc', 48, 206, 1],
-  ['vasque', 140, 174, 1],
-  ['evier', 124, 264, 1],
-  ['frigo', 132, 284, 1],
-  ['cuisson', 90, 156, 1],
-  ['planTravail', 66, 40, 1],
-  ['placard', 28, 132, 1],
-  ['baie2', 158, 32, 1],
-  ['baie3', 46, 28, 1],
-  ['porteG', 142, 122, 1],
-  ['porteD', 110, 122, 1],
-  ['terrasse', 32, 36, 1],
+  ['canape',54,300,0],['table',38,266,0],['baignoir',162,68,0],
+  ['douche',60,74,0],['wc',140,180,0],['vasque',122,180,0],
+  ['evier',154,128,0],['frigo',154,126,0],['cuisson',58,78,0],
+  ['planTravail',154,40,0],['placard',50,274,0],['baie2',74,34,0],
+  ['baie3',38,298,0],['porteG',120,166,0],['porteD',140,46,0],
+  ['terrasse',120,268,0],
+  ['canape',54,32,1],['table',166,264,1],['baignoir',104,148,1],
+  ['douche',104,152,1],['wc',48,206,1],['vasque',140,174,1],
+  ['evier',124,264,1],['frigo',132,284,1],['cuisson',90,156,1],
+  ['planTravail',66,40,1],['placard',28,132,1],['baie2',158,32,1],
+  ['baie3',46,28,1],['porteG',142,122,1],['porteD',110,122,1],
+  ['terrasse',32,36,1],
 ];
 
 function asset(type, x, z, floor) {
-  const y = floor * H;
-  const s = S * 2;
-  switch(type) {
-    case 'canape':
-      B(1.8*s, 0.5, 0.7*s, tissu, x, y+0.25, z);
-      B(1.8*s, 0.3, 0.12*s, tissu, x, y+0.5, z-0.3*s);
-      break;
-    case 'table':
-      B(0.7*s, 0.7, 0.5*s, bois, x, y+0.35, z);
-      B(0.3*s, 0.4, 0.3*s, bois, x-0.5*s, y+0.2, z+0.3*s);
-      B(0.3*s, 0.4, 0.3*s, bois, x+0.5*s, y+0.2, z+0.3*s);
-      break;
-    case 'baignoir':
-      B(0.7*s, 0.4, 1.5*s, blcM, x, y+0.2, z);
-      B(0.6*s, 0.1, 1.4*s, M(0x88ccff, 0.1, 0, 0x88ccff, 0.3), x, y+0.38, z);
-      break;
-    case 'douche':
-      B(0.9*s, 0.05, 0.9*s, carrelage, x, y+0.025, z);
-      B(0.02, 0.8, 0.9*s, vitre, x-0.45*s, y+0.4, z);
-      B(0.9*s, 0.8, 0.02, vitre, x, y+0.4, z-0.45*s);
-      B(0.02, 0.02, 0.04, metal, x-0.42*s, y+0.8, z-0.42*s);
-      break;
-    case 'wc':
-      B(0.35*s, 0.4, 0.5*s, blcM, x, y+0.2, z);
-      B(0.15*s, 0.6, 0.15*s, M(0x5a7a4a, 0.5), x-0.1*s, y+0.3, z+0.2*s);
-      break;
-    case 'vasque':
-      B(0.5*s, 0.75, 0.5*s, blcM, x, y+0.375, z);
-      B(0.35*s, 0.08, 0.35*s, M(0x88ccff, 0.1), x, y+0.4, z);
-      B(0.02, 0.5, 0.02, metal, x, y+0.6, z-0.15*s);
-      break;
-    case 'evier':
-      B(0.5*s, 0.75, 0.4*s, metal, x, y+0.375, z);
-      B(0.4*s, 0.08, 0.3*s, M(0x88ccff, 0.1), x, y+0.4, z);
-      break;
-    case 'frigo':
-      B(0.5*s, 1.6, 0.6*s, M(0xcccccc, 0.3, 0.8), x, y+0.8, z);
-      B(0.48*s, 0.02, 0.58*s, noir, x, y+0.8, z);
-      B(0.48*s, 0.02, 0.58*s, noir, x, y+1.55, z);
-      break;
-    case 'cuisson':
-      B(0.4*s, 0.05, 0.5*s, noir, x, y+0.025, z);
-      B(0.15*s, 0.01, 0.15*s, M(0xff4400, 0.5), x-0.1*s, y+0.03, z-0.1*s);
-      B(0.15*s, 0.01, 0.15*s, M(0xff4400, 0.5), x+0.1*s, y+0.03, z+0.1*s);
-      break;
-    case 'planTravail':
-      B(2.0*s, 0.75, 0.6*s, bois, x, y+0.375, z);
-      B(2.0*s, 0.04, 0.6*s, M(0x888888, 0.3, 0.7), x, y+0.77, z);
-      B(2.0*s, 0.02, 0.6*s, bois, x, y+0.79, z);
-      break;
-    case 'placard':
-      B(1.2*s, 2.0, 0.5*s, bois, x, y+1.0, z);
-      B(0.02, 1.8, 0.48*s, noir, x-0.3*s, y+0.95, z);
-      B(0.02, 1.8, 0.48*s, noir, x+0.3*s, y+0.95, z);
-      break;
-    case 'baie2':
-      B(1.2*s, H*0.7, 0.03, vitre, x, y+0.95, z);
-      B(0.04, H*0.7, 0.05, noir, x-0.6*s, y+0.95, z);
-      B(0.04, H*0.7, 0.05, noir, x+0.6*s, y+0.95, z);
-      B(1.2*s, 0.03, 0.05, noir, x, y+H*0.7, z);
-      break;
-    case 'baie3':
-      B(1.8*s, H*0.7, 0.03, vitre, x, y+0.95, z);
-      B(0.04, H*0.7, 0.05, noir, x-0.9*s, y+0.95, z);
-      B(0.04, H*0.7, 0.05, noir, x, y+0.95, z);
-      B(0.04, H*0.7, 0.05, noir, x+0.9*s, y+0.95, z);
-      B(1.8*s, 0.03, 0.05, noir, x, y+H*0.7, z);
-      break;
-    case 'porteG':
-      B(0.03, H*0.7, 0.6*s, bois, x, y+0.95, z);
-      B(0.02, 0.3, 0.02, metal, x, y+0.9, z-0.25*s);
-      break;
-    case 'porteD':
-      B(0.03, H*0.7, 0.6*s, bois, x, y+0.95, z);
-      B(0.02, 0.3, 0.02, metal, x, y+0.9, z+0.25*s);
-      break;
-    case 'terrasse':
-      B(2.5*s, 0.1, 2*s, gres, x, y+0.05, z);
-      B(0.12*s, 2.0, 0.12*s, M(0xd4c9b8, 0.7), x-1.1*s, y+1.0, z-0.8*s);
-      B(0.12*s, 2.0, 0.12*s, M(0xd4c9b8, 0.7), x+1.1*s, y+1.0, z-0.8*s);
-      break;
+  const y=floor*H_ET, s=S*2;
+  switch(type){
+    case'canape':B(1.8*s,.5,.7*s,bois,x,y+.25,z);B(1.8*s,.3,.12*s,bois,x,y+.5,z-.3*s);break;
+    case'table':B(.7*s,.7,.5*s,bois,x,y+.35,z);B(.3*s,.4,.3*s,bois,x-.5*s,y+.2,z+.3*s);B(.3*s,.4,.3*s,bois,x+.5*s,y+.2,z+.3*s);break;
+    case'baignoir':B(.7*s,.4,1.5*s,new THREE.MeshStandardMaterial({color:0xe8e0d0,roughness:.5}),x,y+.2,z);break;
+    case'douche':B(.9*s,.05,.9*s,new THREE.MeshStandardMaterial({color:0x8a9a7a,roughness:.5}),x,y+.025,z);break;
+    case'wc':B(.35*s,.4,.5*s,new THREE.MeshStandardMaterial({color:0xe8e0d0,roughness:.5}),x,y+.2,z);break;
+    case'vasque':B(.5*s,.75,.5*s,new THREE.MeshStandardMaterial({color:0xe8e0d0,roughness:.5}),x,y+.375,z);break;
+    case'evier':B(.5*s,.75,.4*s,new THREE.MeshStandardMaterial({color:0x888888,roughness:.3,metalness:.7}),x,y+.375,z);break;
+    case'frigo':B(.5*s,1.6,.6*s,new THREE.MeshStandardMaterial({color:0xcccccc,roughness:.3,metalness:.8}),x,y+.8,z);break;
+    case'cuisson':B(.4*s,.05,.5*s,new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:.5}),x,y+.025,z);break;
+    case'planTravail':B(2*s,.75,.6*s,bois,x,y+.375,z);B(2*s,.04,.6*s,new THREE.MeshStandardMaterial({color:0x888888,roughness:.3,metalness:.7}),x,y+.77,z);break;
+    case'placard':B(1.2*s,2,.5*s,bois,x,y+1,z);break;
+    case'baie2':B(1.2*s,H_ET*.7,.03,vitre,x,y+.95,z);B(.04,H_ET*.7,.05,cadre,x-.6*s,y+.95,z);B(.04,H_ET*.7,.05,cadre,x+.6*s,y+.95,z);B(1.2*s,.03,.05,cadre,x,y+H_ET*.7,z);break;
+    case'baie3':B(1.8*s,H_ET*.7,.03,vitre,x,y+.95,z);B(.04,H_ET*.7,.05,cadre,x-.9*s,y+.95,z);B(.04,H_ET*.7,.05,cadre,x,y+.95,z);B(.04,H_ET*.7,.05,cadre,x+.9*s,y+.95,z);B(1.8*s,.03,.05,cadre,x,y+H_ET*.7,z);break;
+    case'porteG':B(.03,H_ET*.7,.6*s,bois,x,y+.95,z);break;
+    case'porteD':B(.03,H_ET*.7,.6*s,bois,x,y+.95,z);break;
+    case'terrasse':B(2.5*s,.1,2*s,new THREE.MeshStandardMaterial({color:0xb8a890,roughness:.6}),x,y+.05,z);
+      B(.12*s,2,.12*s,new THREE.MeshStandardMaterial({color:0xd4c9b8,roughness:.7}),x-1.1*s,y+1,z-.8*s);
+      B(.12*s,2,.12*s,new THREE.MeshStandardMaterial({color:0xd4c9b8,roughness:.7}),x+1.1*s,y+1,z-.8*s);break;
   }
 }
+A.forEach(([t,px,pz,f]) => asset(t, pX(px), pZ(pz), f));
 
-A.forEach(([t, px, pz, f]) => asset(t, pxX(px), pxZ(pz), f));
+// ═══════════════════════════════════════════════
+//  ALLÉES + TERRAIN
+// ═══════════════════════════════════════════════
+B(3, 0.04, 5, allee, GX+2.3, 0.01, pZ(308)+3, false, true);
+B(1.2, 0.04, 2.5, allee, 0, 0.01, pZ(308)+2, false, true);
+B(L*0.5, 0.06, 2, new THREE.MeshStandardMaterial({color:0xb8a890,roughness:.6}), 0, 0.03, -D/2-1, false, true);
 
-// ─── Toit pentu ───
-const T_H = 1.8, T_B = H*2;
-const gShape = new THREE.Shape();
-gShape.moveTo(-LW/2-0.3, T_B);
-gShape.lineTo(LW/2+0.3, T_B);
-gShape.lineTo(LW/2-0.5, T_B+T_H);
-gShape.lineTo(-LW/2-0.5, T_B+T_H);
-gShape.closePath();
-const texG = new THREE.ExtrudeGeometry(gShape, {depth: LD+0.6, bevelEnabled: false});
-const gable = new THREE.Mesh(texG, M(0x4a3a2a, 0.6));
-gable.position.set(0, 0, -LD/2-0.3);
-scene.add(gable);
+// ═══════════════════════════════════════════════
+//  ÉCLAIRAGE
+// ═══════════════════════════════════════════════
+sc.add(new THREE.AmbientLight(0xffffff, 0.5));
+sc.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.4));
 
-// ─── Éclairage ───
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-scene.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.4));
-const soleil = new THREE.DirectionalLight(0xffeedd, 1.5);
+const soleil = new THREE.DirectionalLight(0xffeedd, 1.6);
 soleil.position.set(8, 12, 6);
 soleil.target.position.set(0, 0, 0);
 soleil.castShadow = true;
@@ -331,31 +291,31 @@ soleil.shadow.mapSize.set(2048, 2048);
 soleil.shadow.camera.near = 0.5; soleil.shadow.camera.far = 30;
 soleil.shadow.camera.left = -12; soleil.shadow.camera.right = 12;
 soleil.shadow.camera.top = 10; soleil.shadow.camera.bottom = -5;
-scene.add(soleil); scene.add(soleil.target);
+sc.add(soleil); sc.add(soleil.target);
 
 for (let f = 0; f < 2; f++)
   for (let i = 0; i < 6; i++) {
-    const l = new THREE.PointLight(0xffeedd, 0.12, 3);
-    l.position.set(-2.5 + i*1, f*H + 2.5, 0);
-    scene.add(l);
+    const l = new THREE.PointLight(0xffeedd, 0.1, 3);
+    l.position.set(-2.5 + i*1, f*H_ET+2.5, 0);
+    sc.add(l);
   }
 
-// ─── Allées ───
-B(3, 0.04, 5, gres, GX+2.3, 0.01, pxZ(308)+3, false, true);
-B(1.2, 0.04, 2.5, gres, 0, 0.01, pxZ(308)+2, false, true);
-
-// ─── Animation ───
+// ═══════════════════════════════════════════════
+//  ANIMATION
+// ═══════════════════════════════════════════════
 function animate() {
   requestAnimationFrame(animate);
-  ctrl.update();
-  renderer.render(scene, camera);
+  co.update();
+  re.render(sc, ca);
 }
 animate();
 
-console.log(`🏠 Maison moderne — Reconstruction complète`);
-console.log(`   ${LW.toFixed(1)}m × ${LD.toFixed(1)}m × ${H*2}m (2 étages)`);
-console.log(`   ${A.length} assets positionnés par template matching`);
-console.log(`   Garage 4.6×7m, toit pentu, ${6} fenêtres`);
+console.log(`🏠 Maison moderne — Bardage bois (vision AI validé)`);
+console.log(`   ${L.toFixed(1)}m × ${D.toFixed(1)}m × 2 étages`);
+console.log(`   Toit plat avec acrotère, fenêtres cadres blancs`);
+console.log(`   Porte garage blanche, porte entrée blanche`);
+console.log(`   ${A.length} assets positionnés`);
+console.log(`   Style: moderne minimaliste (analyse smolvlm2)`);
 </script>
 </body>
 </html>
