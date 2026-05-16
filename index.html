@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kub MAP — Pièce intérieure</title>
+  <title>Kub MAP — Deux pièces</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
     canvas { display: block; }
@@ -26,7 +26,7 @@
 </head>
 <body>
 
-<div id="info">🖱️ <strong>Clique</strong> pour jouer | <strong>WASD</strong> se déplacer | <strong>Shift</strong> courir | <strong>ESC</strong> libérer</div>
+<div id="info">🖱️ <strong>Clique</strong> | <strong>WASD</strong> se déplacer | <strong>Shift</strong> courir | <strong>ESC</strong> libérer</div>
 
 <script type="importmap">
 {
@@ -44,17 +44,15 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 // ═══════════════════════════════════════════════
 //  DIMENSIONS
 // ═══════════════════════════════════════════════
-const W = 3;
-const D = 4;
-const H = 2.5;
-const TILE = 0.5; // mètres par carreau de sol
+const W = 3, D = 4, H = 2.5;
+const TILE = 0.5;
+const W2 = 3, D2 = 4, H2 = 2.5; // pièce 2
 
 // ═══════════════════════════════════════════════
 //  SCÈNE / CAMÉRA / RENDU
 // ═══════════════════════════════════════════════
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x222222);
-scene.fog = new THREE.Fog(0x222222, 6, 12);
+scene.background = new THREE.Color(0x151515);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 50);
 camera.position.set(0, 1.70, 0);
@@ -78,7 +76,7 @@ window.addEventListener('resize', () => {
 });
 
 // ═══════════════════════════════════════════════
-//  TEXTURES PROCÉDURALES
+//  HELPERS TEXTURES
 // ═══════════════════════════════════════════════
 
 function makeCanvas(w, h, drawFn) {
@@ -88,219 +86,245 @@ function makeCanvas(w, h, drawFn) {
   return c;
 }
 
-// Sol carrelé
-const floorTex = new THREE.CanvasTexture(
-  makeCanvas(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#c9b8a5';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#a0907a';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(1, 1, w - 2, h - 2);
-    for (let i = 0; i < 200; i++) {
-      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.03})`;
-      ctx.fillRect(Math.random() * w, Math.random() * h, Math.random() * 3 + 1, 1);
-    }
-  })
-);
-floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-floorTex.repeat.set(W / TILE, D / TILE);
-floorTex.anisotropy = 8;
-
-// Plafond blanc grainé
-const ceilTex = new THREE.CanvasTexture(
-  makeCanvas(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#f2efe8';
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 100; i++) {
-      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.015})`;
-      ctx.fillRect(Math.random() * w, Math.random() * h, Math.random() * 2, Math.random() * 2);
-    }
-  })
-);
-ceilTex.wrapS = ceilTex.wrapT = THREE.RepeatWrapping;
-ceilTex.repeat.set(W / 1, D / 1);
-ceilTex.anisotropy = 4;
-
-// Crépi tileable
 function makePlaster(base) {
-  const tex = new THREE.CanvasTexture(
-    makeCanvas(128, 128, (ctx, w, h) => {
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 400; i++) {
-        const x = Math.random() * w;
-        const y = Math.random() * h;
-        const bright = Math.random() > 0.5 ? 0.015 : -0.015;
-        ctx.fillStyle = bright > 0
-          ? `rgba(255,255,255,${bright})`
-          : `rgba(0,0,0,${-bright})`;
-        ctx.fillRect(x, y, Math.max(1, Math.random() * 4), Math.max(1, Math.random() * 4));
-      }
-    })
-  );
+  const tex = new THREE.CanvasTexture(makeCanvas(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 400; i++) {
+      const x = Math.random() * w, y = Math.random() * h;
+      const bright = Math.random() > 0.5 ? 0.015 : -0.015;
+      ctx.fillStyle = bright > 0 ? `rgba(255,255,255,${bright})` : `rgba(0,0,0,${-bright})`;
+      ctx.fillRect(x, y, Math.max(1, Math.random() * 4), Math.max(1, Math.random() * 4));
+    }
+  }));
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;
   return tex;
 }
 
+const floorTex = new THREE.CanvasTexture(makeCanvas(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#c9b8a5';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#a0907a';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1, 1, w - 2, h - 2);
+  for (let i = 0; i < 200; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.03})`;
+    ctx.fillRect(Math.random() * w, Math.random() * h, Math.random() * 3 + 1, 1);
+  }
+}));
+floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+floorTex.repeat.set(W / TILE, D / TILE);
+floorTex.anisotropy = 8;
+
+// Sol pièce 2 — parquet
+const floorTex2 = new THREE.CanvasTexture(makeCanvas(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#8a7a5a';
+  ctx.fillRect(0, 0, w, h);
+  // Lames horizontales
+  const lameH = 20;
+  for (let y = 0; y < h; y += lameH) {
+    const shade = 0.9 + Math.random() * 0.15;
+    ctx.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.08})`;
+    ctx.fillRect(0, y, w, lameH);
+    // Joint entre lames
+    ctx.strokeStyle = '#6a5a3a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+    // Joints irréguliers verticaux
+    for (let x = 0; x < w; x += 40 + Math.random() * 30) {
+      ctx.strokeStyle = `rgba(0,0,0,${0.1 + Math.random() * 0.1})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + lameH);
+      ctx.stroke();
+    }
+  }
+}));
+floorTex2.wrapS = floorTex2.wrapT = THREE.RepeatWrapping;
+floorTex2.repeat.set(W2 / TILE, D2 / TILE);
+floorTex2.anisotropy = 8;
+
+const ceilTex = new THREE.CanvasTexture(makeCanvas(128, 128, (ctx, w, h) => {
+  ctx.fillStyle = '#f2efe8';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 100; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.015})`;
+    ctx.fillRect(Math.random() * w, Math.random() * h, Math.random() * 2, Math.random() * 2);
+  }
+}));
+ceilTex.wrapS = ceilTex.wrapT = THREE.RepeatWrapping;
+ceilTex.repeat.set(W / 1, D / 1);
+ceilTex.anisotropy = 4;
+
 // ═══════════════════════════════════════════════
-//  PIÈCE (cube normales inversées)
+//  PIÈCE 1 (visible)
 // ═══════════════════════════════════════════════
 
-// Mur -Z (fond) = invisible : la fenêtre montre l'extérieur
 const murInvisible = new THREE.MeshStandardMaterial({
-  transparent: true,
-  opacity: 0,
-  side: THREE.BackSide,
-  depthWrite: false,
+  transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false,
 });
 
-const wallMaterials = [
-  // +x : mur droit (3m × 2.5m) — avec porte
-  (() => {
-    const t = makePlaster('#d4c9b8');
-    t.repeat.set(H / 0.5, D / 0.5);
-    return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.85 });
-  })(),
-  // -x : mur gauche
-  (() => {
-    const t = makePlaster('#c8c0b0');
-    t.repeat.set(H / 0.5, D / 0.5);
-    return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.85 });
-  })(),
-  // +y : plafond
-  new THREE.MeshStandardMaterial({ map: ceilTex, side: THREE.BackSide, roughness: 0.9 }),
-  // -y : sol
-  new THREE.MeshStandardMaterial({ map: floorTex, side: THREE.BackSide, roughness: 0.6 }),
-  // +z : face avant
-  (() => {
-    const t = makePlaster('#e0d8c8');
-    t.repeat.set(W / 0.5, H / 0.5);
-    return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.85 });
-  })(),
-  // -z : face arrière — INVISIBLE (fenêtre)
-  murInvisible,
-];
-
-const room = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), wallMaterials);
-room.position.y = H / 2;
-room.castShadow = true;
-room.receiveShadow = true;
-scene.add(room);
-
-// ═══════════════════════════════════════════════
-//  PLINTHES (baseboards)
-// ═══════════════════════════════════════════════
-const plintheMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.7 });
-const PLINTHE_H = 0.08;
-const PLINTHE_D = 0.025;
-
-function makePlinthe() {
-  const g = new THREE.Group();
-  const add = (x, y, z, w, h, d) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), plintheMat);
-    m.position.set(x, y, z);
-    g.add(m);
-  };
-  add(0, PLINTHE_H/2, D/2 - 0.005, W, PLINTHE_H, PLINTHE_D);   // +Z
-  add(0, PLINTHE_H/2, -D/2 + 0.005, W, PLINTHE_H, PLINTHE_D);   // -Z
-  add(W/2 - 0.005, PLINTHE_H/2, 0, PLINTHE_D, PLINTHE_H, D);    // +X
-  add(-W/2 + 0.005, PLINTHE_H/2, 0, PLINTHE_D, PLINTHE_H, D);   // -X
-  return g;
-}
-scene.add(makePlinthe());
-
-// ═══════════════════════════════════════════════
-//  CIMAISE
-// ═══════════════════════════════════════════════
-const cimaiseMat = new THREE.MeshStandardMaterial({ color: 0xb8a890, roughness: 0.5, metalness: 0.2 });
-const CY = 1.10, CH = 0.08, CD = 0.03;
-
-function makeCimaise() {
-  const g = new THREE.Group();
-  const add = (x, y, z, w, h, d) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cimaiseMat);
-    m.position.set(x, y, z);
-    g.add(m);
-  };
-  add(0, CY, D/2 - 0.01, W, CH, CD);       // +Z
-  add(W/2 - 0.01, CY, 0, CD, CH, D);       // +X
-  add(-W/2 + 0.01, CY, 0, CD, CH, D);      // -X
-  // -Z : pas de cimaise (fenêtre)
-  return g;
-}
-scene.add(makeCimaise());
-
-// ═══════════════════════════════════════════════
-//  PORTE (mur +X)
-// ═══════════════════════════════════════════════
-const doorMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.6, metalness: 0.05 });
-const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0xf0ede8, roughness: 0.7 });
-const DOOR_W = 0.85;
-const DOOR_H = 2.10;
-const DOOR_D = 0.04;
-const doorX = W/2 - 0.01;
-const doorY = DOOR_H/2;
-
-// Panneau de porte
-const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_D, DOOR_H, DOOR_W), doorMat);
-doorPanel.position.set(doorX, doorY, 0.6); // décalé du centre pour coin de pièce
-scene.add(doorPanel);
-
-// Cadre (montants)
-const addDoorBar = (y, z, w, h) => {
-  const b = new THREE.Mesh(new THREE.BoxGeometry(DOOR_D + 0.02, h, w), doorFrameMat);
-  b.position.set(doorX, y, z);
-  scene.add(b);
+const wallMat1 = (c) => {
+  const t = makePlaster(c);
+  t.repeat.set(W / 0.5, H / 0.5);
+  return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.85 });
 };
-addDoorBar(doorY, 0.6 - DOOR_W/2, 0.04, DOOR_H + 0.04);  // montant gauche
-addDoorBar(doorY, 0.6 + DOOR_W/2, 0.04, DOOR_H + 0.04);  // montant droit
-addDoorBar(doorY + DOOR_H/2, 0.6, DOOR_W + 0.04, 0.04);  // linteau
+const wallMat1s = (c) => {
+  const t = makePlaster(c);
+  t.repeat.set(H / 0.5, D / 0.5);
+  return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.85 });
+};
 
-// Poignée (petite sphère)
-const knob = new THREE.Mesh(
-  new THREE.SphereGeometry(0.03, 8, 8),
-  new THREE.MeshStandardMaterial({ color: 0xc8a050, roughness: 0.3, metalness: 0.7 })
-);
-knob.position.set(doorX, 1.0, 0.6 + DOOR_W/2 - 0.05);
-scene.add(knob);
+const room1 = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), [
+  wallMat1s('#d4c9b8'), // +x — INVISIBLE (porte vers pièce 2)
+  wallMat1s('#c8c0b0'), // -x
+  new THREE.MeshStandardMaterial({ map: ceilTex, side: THREE.BackSide, roughness: 0.9 }), // +y
+  new THREE.MeshStandardMaterial({ map: floorTex, side: THREE.BackSide, roughness: 0.6 }), // -y
+  wallMat1('#e0d8c8'),   // +z
+  murInvisible,          // -z — INVISIBLE (fenêtre)
+]);
+room1.position.y = H / 2;
+room1.receiveShadow = true;
+scene.add(room1);
 
-// ═══════════════════════════════════════════════
-//  FENÊTRE + VUE EXTÉRIEURE
-// ═══════════════════════════════════════════════
-const FW = 1.2, FH = 1.4;
-const fX = 0, fY = 1.3, fZ = -D/2 + 0.01;
+// ─── Muret autour de la porte (comble le mur +X invisible) ───
+const DOOR_W = 0.85, DOOR_H = 2.10;
+const doorZ = 0.6; // position Z de la porte sur le mur +X
 
-// Vitre
-const glassMat = new THREE.MeshStandardMaterial({
-  color: 0x87ceeb,
-  roughness: 0.05,
-  metalness: 0.0,
-  transparent: true,
-  opacity: 0.35,
-  side: THREE.DoubleSide,
+const murPorteMat = new THREE.MeshStandardMaterial({
+  map: makePlaster('#d4c9b8'), side: THREE.BackSide, roughness: 0.85
 });
-const glass = new THREE.Mesh(new THREE.PlaneGeometry(FW * 0.85, FH * 0.85), glassMat);
-glass.position.set(fX, fY, fZ);
-scene.add(glass);
+murPorteMat.map.repeat.set(H / 0.5, D / 0.5);
 
-// Cadre fenêtre
-function addBar(x, y, w, h) {
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), doorFrameMat);
-  b.position.set(x, y, fZ);
+function addMurPorte(w, h, z, y) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), murPorteMat);
+  m.position.set(W/2 - 0.01, y, z);
+  scene.add(m);
+}
+// Panneau au-dessus de la porte
+addMurPorte(0.05, H - DOOR_H, doorZ - DOOR_W/4, DOOR_H + (H - DOOR_H)/2);
+addMurPorte(0.05, H - DOOR_H, doorZ + DOOR_W/4, DOOR_H + (H - DOOR_H)/2);
+// Panneau latéral gauche
+addMurPorte(0.05, H, doorZ - DOOR_W/2 - 0.25, H/2);
+// Panneau latéral droit
+addMurPorte(0.05, H, doorZ + DOOR_W/2 + 0.25, H/2);
+// Panneau au-dessus (large)
+const hautPorte = new THREE.Mesh(
+  new THREE.BoxGeometry(0.05, H - DOOR_H, D),
+  murPorteMat
+);
+hautPorte.position.set(W/2 - 0.01, DOOR_H + (H - DOOR_H)/2, 0);
+scene.add(hautPorte);
+
+// ─── Cadre de porte 3D ───
+const cadreMat = new THREE.MeshStandardMaterial({ color: 0xf0ede8, roughness: 0.7 });
+function addCadreBar(y, z, w, h) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, w), cadreMat);
+  b.position.set(W/2 - 0.02, y, z);
   scene.add(b);
 }
-addBar(fX, fY + FH/2, FW + 0.08, 0.04);
-addBar(fX, fY - FH/2, FW + 0.08, 0.04);
-addBar(fX - FW/2, fY, 0.04, FH + 0.04);
-addBar(fX + FW/2, fY, 0.04, FH + 0.04);
-addBar(0, fY, 0.03, FH * 0.85);  // croisillon vertical
-addBar(fX, fY, FW * 0.85, 0.03); // croisillon horizontal
+addCadreBar(DOOR_H/2, doorZ - DOOR_W/2, 0.04, DOOR_H);
+addCadreBar(DOOR_H/2, doorZ + DOOR_W/2, 0.04, DOOR_H);
+addCadreBar(DOOR_H, doorZ, DOOR_W + 0.04, 0.04); // linteau
+// Seuil
+addCadreBar(0.02, doorZ, DOOR_W + 0.04, 0.02);
 
-// Vue extérieure (paysage derrière la fenêtre)
-const extScene = new THREE.Scene();
+// ═══════════════════════════════════════════════
+//  PIÈCE 2 (derrière la porte)
+// ═══════════════════════════════════════════════
 
-// Ciel gradient
+const room2X = W; // centre de la pièce 2 en X
+
+const wallMat2 = (c) => {
+  const t = makePlaster(c);
+  t.repeat.set(W2 / 0.5, H2 / 0.5);
+  return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.8 });
+};
+const wallMat2s = (c) => {
+  const t = makePlaster(c);
+  t.repeat.set(H2 / 0.5, D2 / 0.5);
+  return new THREE.MeshStandardMaterial({ map: t, side: THREE.BackSide, roughness: 0.8 });
+};
+
+// Pour la pièce 2, le mur -X (qui touche la pièce 1) doit aussi être
+// partiellement invisible pour laisser passer la porte.
+// On le rend invisible et on ajoute des murets autour de l'ouverture côté pièce 2.
+const room2 = new THREE.Mesh(new THREE.BoxGeometry(W2, H2, D2), [
+  wallMat2s('#7a6a5a'), // +x
+  murInvisible,          // -x (coté pièce 1) — INVISIBLE
+  new THREE.MeshStandardMaterial({ map: ceilTex, side: THREE.BackSide, roughness: 0.9 }),
+  new THREE.MeshStandardMaterial({ map: floorTex2, side: THREE.BackSide, roughness: 0.6 }),
+  wallMat2('#8a7a5a'),  // +z
+  wallMat2('#7a6a5a'),  // -z
+]);
+room2.position.set(room2X + W2/2, H2 / 2, 0);
+room2.receiveShadow = true;
+scene.add(room2);
+
+// Murets côté pièce 2 autour de l'ouverture de porte
+const murPorteMat2 = new THREE.MeshStandardMaterial({
+  map: makePlaster('#7a6a5a'), side: THREE.BackSide, roughness: 0.8
+});
+murPorteMat2.map.repeat.set(H2 / 0.5, D2 / 0.5);
+
+function addMurPorte2(w, h, z, y) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), murPorteMat2);
+  m.position.set(W + 0.01, y, z);
+  scene.add(m);
+}
+addMurPorte2(0.05, H2 - DOOR_H, doorZ - DOOR_W/4, DOOR_H + (H2 - DOOR_H)/2);
+addMurPorte2(0.05, H2 - DOOR_H, doorZ + DOOR_W/4, DOOR_H + (H2 - DOOR_H)/2);
+addMurPorte2(0.05, H2, doorZ - DOOR_W/2 - 0.25, H2/2);
+addMurPorte2(0.05, H2, doorZ + DOOR_W/2 + 0.25, H2/2);
+const hautPorte2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, H2 - DOOR_H, D2), murPorteMat2);
+hautPorte2.position.set(W + 0.01, DOOR_H + (H2 - DOOR_H)/2, 0);
+scene.add(hautPorte2);
+
+// ─── Lumière pièce 2 ───
+const point2 = new THREE.PointLight(0xeeddcc, 2, 6);
+point2.position.set(room2X + W2/2, H2 - 0.1, 0);
+point2.castShadow = true;
+scene.add(point2);
+
+// Abat-jour pièce 2
+const abat2 = new THREE.Mesh(
+  new THREE.ConeGeometry(0.15, 0.1, 12),
+  new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.6, emissive: 0xeeddcc, emissiveIntensity: 0.08 })
+);
+abat2.position.set(room2X + W2/2, H2 - 0.02, 0);
+scene.add(abat2);
+
+// ─── Fenêtre pièce 2 (sur mur +X) ───
+const FW2 = 1.0, FH2 = 1.2;
+const fX2 = room2X + W2/2, fY2 = 1.3, fZ2 = -D2/2 + 0.01;
+
+const glass2 = new THREE.Mesh(
+  new THREE.PlaneGeometry(FW2 * 0.85, FH2 * 0.85),
+  new THREE.MeshStandardMaterial({ color: 0x87ceeb, roughness: 0.05, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+);
+glass2.position.set(fX2, fY2, fZ2);
+scene.add(glass2);
+
+function addBar2(x, y, w, h) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), cadreMat);
+  b.position.set(x, y, fZ2);
+  scene.add(b);
+}
+addBar2(fX2, fY2 + FH2/2, FW2 + 0.08, 0.04);
+addBar2(fX2, fY2 - FH2/2, FW2 + 0.08, 0.04);
+addBar2(fX2 - FW2/2, fY2, 0.04, FH2 + 0.04);
+addBar2(fX2 + FW2/2, fY2, 0.04, FH2 + 0.04);
+addBar2(fX2, fY2, 0.03, FH2 * 0.85);
+addBar2(fX2, fY2, FW2 * 0.85, 0.03);
+
+// ═══════════════════════════════════════════════
+//  VUE EXTÉRIEURE (commune aux deux fenêtres)
+// ═══════════════════════════════════════════════
 const skyCanvas = makeCanvas(512, 512, (ctx, w, h) => {
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, '#7ec8e3');
@@ -309,70 +333,50 @@ const skyCanvas = makeCanvas(512, 512, (ctx, w, h) => {
   grad.addColorStop(1, '#c8e8d8');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
-  // Nuages
   for (let i = 0; i < 8; i++) {
-    const cx = Math.random() * w;
-    const cy = Math.random() * h * 0.5;
-    const r = 20 + Math.random() * 40;
+    const cx = Math.random() * w, cy = Math.random() * h * 0.5, r = 20 + Math.random() * 40;
     ctx.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.3})`;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, r, r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + r * 0.4, cy - r * 0.15, r * 0.6, r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r * 0.4, cy - r * 0.15, r * 0.6, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
   }
 });
-const skyTex = new THREE.CanvasTexture(skyCanvas);
-const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.DoubleSide });
-const skyPlane = new THREE.Mesh(new THREE.PlaneGeometry(8, 6), skyMat);
-skyPlane.position.set(0, 3, -2.5);
-scene.add(skyPlane);
-
-// Sol extérieur (pelouse)
-const grassTex = new THREE.CanvasTexture(
-  makeCanvas(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#5a8a4a';
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 500; i++) {
-      const x = Math.random() * w;
-      const y = Math.random() * h;
-      const c = ['#4a7a3a', '#6a9a5a', '#3a6a2a', '#5a8a4a'][Math.floor(Math.random() * 4)];
-      ctx.fillStyle = c;
-      ctx.fillRect(x, y, 1, Math.max(1, Math.random() * 3));
-    }
-  })
+// Ciel
+const skyMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(12, 6),
+  new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(skyCanvas), side: THREE.DoubleSide })
 );
-grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-grassTex.repeat.set(4, 4);
-const groundGeo = new THREE.PlaneGeometry(8, 6);
-const groundMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.9 });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.position.set(0, 0, -2.5);
-ground.receiveShadow = true;
-scene.add(ground);
+skyMesh.position.set(0, 3, -2.5);
+scene.add(skyMesh);
 
-// Arbre simple (tronc + couronne)
+const grassTex = new THREE.CanvasTexture(makeCanvas(128, 128, (ctx, w, h) => {
+  ctx.fillStyle = '#5a8a4a';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 500; i++) {
+    ctx.fillStyle = ['#4a7a3a','#6a9a5a','#3a6a2a','#5a8a4a'][Math.floor(Math.random()*4)];
+    ctx.fillRect(Math.random()*w, Math.random()*h, 1, Math.max(1, Math.random()*3));
+  }
+}));
+grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+grassTex.repeat.set(6, 4);
+const extGround = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.9 }));
+extGround.rotation.x = -Math.PI / 2;
+extGround.position.set(0, 0, -2.5);
+extGround.receiveShadow = true;
+scene.add(extGround);
+
+// Arbres (des deux côtés)
 function makeTree(x, z) {
   const g = new THREE.Group();
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.9 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3a7a2a, roughness: 0.8 });
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.2), trunkMat);
-  trunk.position.y = 0.6;
-  trunk.castShadow = true;
-  g.add(trunk);
-  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 6), leafMat);
-  crown.position.set(0, 1.4, 0);
-  crown.castShadow = true;
-  g.add(crown);
-  g.position.set(x, 0, z);
-  return g;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.2), new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.9 }));
+  trunk.position.y = 0.6; trunk.castShadow = true; g.add(trunk);
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 6), new THREE.MeshStandardMaterial({ color: 0x3a7a2a, roughness: 0.8 }));
+  crown.position.set(0, 1.4, 0); crown.castShadow = true; g.add(crown);
+  g.position.set(x, 0, z); return g;
 }
 scene.add(makeTree(-2, -2.5));
 scene.add(makeTree(2.5, -2.2));
-scene.add(makeTree(2, -4));
-scene.add(makeTree(-2.5, -4.5));
+scene.add(makeTree(6, -2.3));
+scene.add(makeTree(5, -4));
 
 // ═══════════════════════════════════════════════
 //  ÉCLAIRAGE
@@ -380,21 +384,19 @@ scene.add(makeTree(-2.5, -4.5));
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0x5a8a4a, 0.5));
 
-// Lumière intérieure (plafonnier)
 const plafonnier = new THREE.PointLight(0xffeedd, 2.5, 6);
 plafonnier.position.set(0, H - 0.1, 0);
 plafonnier.castShadow = true;
 scene.add(plafonnier);
 
-// Petit abat-jour
-const abatJour = new THREE.Mesh(
+// Abat-jour pièce 1
+const abat1 = new THREE.Mesh(
   new THREE.ConeGeometry(0.15, 0.1, 12),
   new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.6, emissive: 0xffeedd, emissiveIntensity: 0.1 })
 );
-abatJour.position.set(0, H - 0.02, 0);
-scene.add(abatJour);
+abat1.position.set(0, H - 0.02, 0);
+scene.add(abat1);
 
-// Soleil extérieur (DirectionalLight)
 const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
 sun.position.set(5, 8, -3);
 sun.target.position.set(0, 0, -3);
@@ -403,278 +405,105 @@ sun.shadow.mapSize.width = 1024;
 sun.shadow.mapSize.height = 1024;
 sun.shadow.camera.near = 0.5;
 sun.shadow.camera.far = 20;
-sun.shadow.camera.left = -5;
-sun.shadow.camera.right = 5;
+sun.shadow.camera.left = -8;
+sun.shadow.camera.right = 8;
 sun.shadow.camera.top = 5;
 sun.shadow.camera.bottom = -5;
 scene.add(sun);
 scene.add(sun.target);
 
 // ═══════════════════════════════════════════════
-//  MARQUEURS DIRECTIONNELS (N/S/E/O)
+//  MARQUEURS
 // ═══════════════════════════════════════════════
 function makeLabel(color, label, size, pos) {
   const c = makeCanvas(128, 128, (ctx, w, h) => {
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(w/2, h/2, w/2 - 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(w/2, h/2, w/2 - 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 26px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, w/2, h/2);
   });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-  s.position.copy(pos);
-  s.scale.set(size, size, 1);
-  return s;
+  s.position.copy(pos); s.scale.set(size, size, 1); return s;
 }
 scene.add(makeLabel('#e06040', 'N', 0.25, new THREE.Vector3(0, 0.2, -D/2 + 0.5)));
 scene.add(makeLabel('#4060e0', 'S', 0.25, new THREE.Vector3(0, 0.2, D/2 - 0.5)));
-scene.add(makeLabel('#40e060', 'E', 0.25, new THREE.Vector3(W/2 - 0.5, 0.2, 0)));
+scene.add(makeLabel('#40e060', 'M', 0.25, new THREE.Vector3(W/2 - 0.3, 0.2, doorZ))); // marqueur porte
 scene.add(makeLabel('#e0e040', 'O', 0.25, new THREE.Vector3(-W/2 + 0.5, 0.2, 0)));
 
 // ═══════════════════════════════════════════════
-//  GRID HELPER
+//  GRILLE REPÈRE
 // ═══════════════════════════════════════════════
 const grid = new THREE.GridHelper(4.5, 9, 0xffffff, 0x888888);
 grid.position.y = 0.003;
 scene.add(grid);
 
 // ═══════════════════════════════════════════════
-//  MOBILIER
-// ═══════════════════════════════════════════════
-
-// ─── Tapis oriental ───
-const rugTex = new THREE.CanvasTexture(
-  makeCanvas(256, 256, (ctx, w, h) => {
-    // Fond rouge profond
-    ctx.fillStyle = '#8a2a1a';
-    ctx.fillRect(0, 0, w, h);
-    // Bordure
-    ctx.strokeStyle = '#c8a050';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(4, 4, w - 8, h - 8);
-    ctx.strokeStyle = '#d8b860';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(12, 12, w - 24, h - 24);
-    // Motif central (médaillon)
-    const cx = w/2, cy = h/2;
-    for (let r = 4; r > 0; r--) {
-      ctx.strokeStyle = ['#c8a050','#5a2a1a','#d8b860'][r % 3];
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 18, r * 14, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    // Petits losanges
-    ctx.fillStyle = '#c8a050';
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
-      const rx = Math.cos(angle) * 70 + cx;
-      const ry = Math.sin(angle) * 50 + cy;
-      ctx.beginPath();
-      ctx.moveTo(rx, ry - 5);
-      ctx.lineTo(rx + 5, ry);
-      ctx.lineTo(rx, ry + 5);
-      ctx.lineTo(rx - 5, ry);
-      ctx.closePath();
-      ctx.fill();
-    }
-  })
-);
-const rug = new THREE.Mesh(
-  new THREE.PlaneGeometry(1.2, 1.8),
-  new THREE.MeshStandardMaterial({ map: rugTex, roughness: 0.8, side: THREE.DoubleSide })
-);
-rug.rotation.x = -Math.PI / 2;
-rug.position.set(0, 0.005, -0.3);
-rug.receiveShadow = true;
-scene.add(rug);
-
-// ─── Table basse ───
-const boisMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.6 });
-const plateau = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.5), boisMat);
-plateau.position.set(0, 0.45, -0.3);
-plateau.castShadow = true;
-plateau.receiveShadow = true;
-scene.add(plateau);
-
-// Pieds de table
-function makePied(x, z) {
-  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.42), boisMat);
-  p.position.set(x, 0.23, z);
-  p.castShadow = true;
-  scene.add(p);
-}
-makePied(-0.3, -0.18);
-makePied(0.3, -0.18);
-makePied(-0.3, -0.42);
-makePied(0.3, -0.42);
-
-// ─── Vase / Bougie sur la table ───
-const vaseMat = new THREE.MeshStandardMaterial({ color: 0x3a6a8a, roughness: 0.3, metalness: 0.1 });
-const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.1, 8), vaseMat);
-vase.position.set(-0.1, 0.55, -0.3);
-vase.castShadow = true;
-scene.add(vase);
-
-// Fleur (petite sphère colorée)
-const fleurMat = new THREE.MeshStandardMaterial({ color: 0xd04a3a, roughness: 0.5 });
-const fleur = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), fleurMat);
-fleur.position.set(-0.1, 0.61, -0.3);
-fleur.castShadow = true;
-scene.add(fleur);
-
-// ─── Chaise ───
-const chaiseMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a, roughness: 0.5 });
-function makeChaise(x, z, rot) {
-  const g = new THREE.Group();
-  // Assise
-  const assise = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 0.35), chaiseMat);
-  assise.position.y = 0.42;
-  assise.castShadow = true;
-  g.add(assise);
-  // Dossier
-  const dossier = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.03), chaiseMat);
-  dossier.position.set(0, 0.65, -0.16);
-  dossier.castShadow = true;
-  g.add(dossier);
-  // Pieds
-  [[-0.15,-0.15],[0.15,-0.15],[-0.15,0.15],[0.15,0.15]].forEach(([px, pz]) => {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.4, 0.025), chaiseMat);
-    p.position.set(px, 0.2, pz);
-    p.castShadow = true;
-    g.add(p);
-  });
-  g.position.set(x, 0, z);
-  g.rotation.y = rot;
-  scene.add(g);
-}
-makeChaise(-0.7, -0.3, 0.3);  // à gauche de la table
-
-// ─── Lampe sur pied (coin -X, +Z) ───
-const lampeMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.7, metalness: 0.3 });
-const piedLampe = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 1.6), lampeMat);
-piedLampe.position.set(-1.1, 0.8, 1.3);
-piedLampe.castShadow = true;
-scene.add(piedLampe);
-
-// Abat-jour de la lampe
-const abatLampeMat = new THREE.MeshStandardMaterial({
-  color: 0xe8dcc8,
-  roughness: 0.7,
-  emissive: 0xffeedd,
-  emissiveIntensity: 0.05,
-  transparent: true,
-  opacity: 0.7,
-  side: THREE.DoubleSide,
-});
-const abatLampe = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.18, 12, 1, true), abatLampeMat);
-abatLampe.position.set(-1.1, 1.7, 1.3);
-scene.add(abatLampe);
-
-// Source lumineuse de la lampe
-const lampeLumiere = new THREE.PointLight(0xffcc88, 0.8, 2.5);
-lampeLumiere.position.set(-1.1, 1.6, 1.3);
-scene.add(lampeLumiere);
-
-// ─── TABLEAU / CADRE sur mur +Z (face avant) ───
-const cadreCanvas = makeCanvas(256, 256, (ctx, w, h) => {
-  // Fond
-  ctx.fillStyle = '#1a2530';
-  ctx.fillRect(0, 0, w, h);
-  // Cadre doré
-  ctx.strokeStyle = '#c8a050';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, w - 8, h - 8);
-  // Montagne stylisée
-  ctx.fillStyle = '#2a3a4a';
-  ctx.beginPath();
-  ctx.moveTo(-20, h);
-  ctx.lineTo(w * 0.2, h * 0.4);
-  ctx.lineTo(w * 0.35, h * 0.55);
-  ctx.lineTo(w * 0.55, h * 0.35);
-  ctx.lineTo(w * 0.75, h * 0.5);
-  ctx.lineTo(w * 1.2, h * 0.3);
-  ctx.lineTo(w + 20, h);
-  ctx.closePath();
-  ctx.fill();
-  // Neige
-  ctx.fillStyle = '#e8e8e8';
-  ctx.beginPath();
-  ctx.moveTo(w * 0.2 - 8, h * 0.4);
-  ctx.lineTo(w * 0.2, h * 0.38);
-  ctx.lineTo(w * 0.2 + 8, h * 0.4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(w * 0.55 - 10, h * 0.35);
-  ctx.lineTo(w * 0.55, h * 0.32);
-  ctx.lineTo(w * 0.55 + 10, h * 0.35);
-  ctx.closePath();
-  ctx.fill();
-  // Soleil couchant
-  ctx.fillStyle = '#d8a040';
-  ctx.beginPath();
-  ctx.arc(w * 0.8, h * 0.25, 15, 0, Math.PI * 2);
-  ctx.fill();
-});
-const cadre = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.6, 0.5),
-  new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cadreCanvas), roughness: 0.5 })
-);
-cadre.position.set(0.8, 1.3, D/2 - 0.01);
-scene.add(cadre);
-
-// ═══════════════════════════════════════════════
-//  MOUVEMENT WASD
+//  COLLISION + WASD (pièce 1 ET pièce 2)
 // ═══════════════════════════════════════════════
 const keys = { w: false, a: false, s: false, d: false, shift: false };
-
 document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
-  if (k === 'w' || k === 'a' || k === 's' || k === 'd') keys[k] = true;
+  if ('wasd'.includes(k)) keys[k] = true;
   if (e.key === 'Shift') keys.shift = true;
 });
 document.addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
-  if (k === 'w' || k === 'a' || k === 's' || k === 'd') keys[k] = false;
+  if ('wasd'.includes(k)) keys[k] = false;
   if (e.key === 'Shift') keys.shift = false;
 });
 
 const clock = new THREE.Clock();
 
-// Collision avec les murs
+// Zone de collision = pièce 1 + pièce 2, connectées par la porte
 function clampPos(pos) {
-  const margin = 0.15;
-  pos.x = Math.max(-W/2 + margin, Math.min(W/2 - margin, pos.x));
-  pos.z = Math.max(-D/2 + margin, Math.min(D/2 - margin, pos.z));
+  const m = 0.15;
+  const doorCenterZ = doorZ;
+  const doorHalfW = DOOR_W / 2;
+
+  // Dans quelle zone est le joueur ?
+  if (pos.x < W/2) {
+    // Pièce 1
+    // Vérifier si on essaie de passer par la porte vers pièce 2
+    if (pos.z > doorCenterZ + doorHalfW || pos.z < doorCenterZ - doorHalfW || pos.y > DOOR_H) {
+      // Pas dans l'alignement de la porte : mur plein
+      pos.x = Math.min(pos.x, W/2 - m);
+    } else {
+      // Dans l'alignement de la porte : on peut traverser
+      pos.x = Math.max(-W/2 + m, Math.min(W + W2 + W2/2 - m, pos.x));
+    }
+    pos.z = Math.max(-D/2 + m, Math.min(D/2 - m, pos.z));
+  } else if (pos.x < W + W2) {
+    // Pièce 2
+    if (pos.z > doorCenterZ + doorHalfW || pos.z < doorCenterZ - doorHalfW || pos.y > DOOR_H) {
+      pos.x = Math.max(W + m, Math.min(W + W2 - m, pos.x));
+    } else {
+      pos.x = Math.max(-W/2 + m, Math.min(W + W2 - m, pos.x));
+    }
+    pos.z = Math.max(-D2/2 + m, Math.min(D2/2 - m, pos.z));
+  } else {
+    // Devrait pas arriver, on force dans la zone valide
+    pos.x = 0;
+    pos.z = 0;
+  }
   return pos;
 }
 
 // ═══════════════════════════════════════════════
-//  BOUCLE D'ANIMATION
+//  BOUCLE
 // ═══════════════════════════════════════════════
 function animate() {
   requestAnimationFrame(animate);
-
-  // WASD
   if (controls.isLocked) {
-    const delta = clock.getDelta();
+    const delta = Math.min(clock.getDelta(), 0.05);
     const speed = keys.shift ? 2.5 : 1.2;
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    right.y = 0;
-    forward.normalize();
-    right.normalize();
+    forward.y = 0; right.y = 0;
+    forward.normalize(); right.normalize();
 
-    if (keys.w) camera.position.add(forward.multiplyScalar(delta * speed));
+    if (keys.w) camera.position.add(forward.clone().multiplyScalar(delta * speed));
     if (keys.s) camera.position.add(forward.clone().multiplyScalar(-delta * speed));
     if (keys.a) camera.position.add(right.clone().multiplyScalar(-delta * speed));
     if (keys.d) camera.position.add(right.clone().multiplyScalar(delta * speed));
@@ -682,16 +511,16 @@ function animate() {
     camera.position.y = 1.70;
     clampPos(camera.position);
   }
-
   renderer.render(scene, camera);
 }
 animate();
 
-console.log(`🏠 Kub MAP v2 : ${W}m x ${D}m x ${H}m (${W*D}m²)`);
-console.log(`   WASD + Shift pour se déplacer`);
-console.log(`   Fenêtre avec vue extérieure`);
-console.log(`   Porte sur mur droit (+X)`);
-console.log(`   Plinthes, cimaise, ombres`);
+console.log(`🏠 Kub MAP — 2 pièces`);
+console.log(`   Pièce 1 : ${W}m x ${D}m x ${H}m (${W*D}m²) — carrelage beige`);
+console.log(`   Pièce 2 : ${W2}m x ${D2}m x ${H2}m (${W2*D2}m²) — parquet`);
+console.log(`   Porte entre les deux (${DOOR_W}m x ${DOOR_H}m)`);
+console.log(`   Fenêtres : pièce 1 (mur -Z), pièce 2 (mur -Z)`);
+console.log(`   WASD + Shift pour se déplacer entre les pièces`);
 </script>
 </body>
 </html>
