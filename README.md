@@ -15,17 +15,19 @@ Ouvre `index.html` dans un navigateur. Clique pour verrouiller la souris.
 
 - Pièce 3m × 4m × 2.5m (12 m²)
 - Sol carrelé 50cm, murs crépi, plafond blanc grainé
-- Fenêtre avec vue extérieure (ciel, pelouse, arbres)
+- Fenêtre avec vue extérieure (ciel gradient, pelouse, arbres)
 - Porte sur mur droit avec poignée
 - Plinthes + cimaise décorative
-- Éclairage plafonnier + soleil extérieur
+- **Mobilier** : tapis oriental, table basse, vase/fleur, chaise, lampe sur pied
+- **Tableau** au mur avant avec paysage de montagne
+- Éclairage plafonnier + lampe d'appoint + soleil extérieur
 - Ombres portées (PCF Soft)
 - Marqueurs directionnels N/S/E/O
 
 ## Technique
 
 - Three.js via importmap CDN
-- PointerLockControls
+- PointerLockControls + WASD
 - Textures procédurales générées en Canvas 2D
 - Collision avec les murs
 - Tone mapping ACES
