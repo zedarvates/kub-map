@@ -37,3 +37,8 @@ Ouvre `index.html` dans un navigateur. Clique pour verrouiller la souris.
 ```
 https://github.com/zedarvates/kub-map
 ```
+
+
+---
+
+[![Donate](https://img.shields.io/badge/☕%20Soutenir-BTC%20%7C%20ETH-orange)](DONATE.md)
